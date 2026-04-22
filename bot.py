@@ -16,6 +16,9 @@ import push_data
 load_dotenv()
 TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
 NEHA_CHAT_ID = int(os.environ["NEHA_CHAT_ID"])
+GROUP_CHAT_ID = int(os.environ["GROUP_CHAT_ID"])
+TEJAS_ID = 7635405143
+AUTHORIZED_IDS = {NEHA_CHAT_ID, TEJAS_ID}
 BERLIN = ZoneInfo("Europe/Berlin")
 WORKDIR = "/home/tejas/products/diet-bot"
 
@@ -120,7 +123,7 @@ async def morning_checkin(app):
         f"Keep it friendly, short, conversational — no bullet points, max 4 sentences."
     )
     response = await run_claude(prompt)
-    await app.bot.send_message(chat_id=NEHA_CHAT_ID, text=response)
+    await app.bot.send_message(chat_id=GROUP_CHAT_ID, text=response)
     session_history.append(("(morning check-in)", response))
     log.info("Morning check-in sent")
 
@@ -137,7 +140,7 @@ async def afternoon_checkin(app):
         f"Keep it to 2 sentences max — short and warm."
     )
     response = await run_claude(prompt)
-    await app.bot.send_message(chat_id=NEHA_CHAT_ID, text=response)
+    await app.bot.send_message(chat_id=GROUP_CHAT_ID, text=response)
     session_history.append(("(afternoon check-in)", response))
     log.info("Afternoon check-in sent")
 
@@ -160,7 +163,7 @@ async def evening_checkin(app):
         f"End with one encouraging sentence for tomorrow. Max 4 sentences."
     )
     response = await run_claude(prompt)
-    await app.bot.send_message(chat_id=NEHA_CHAT_ID, text=response)
+    await app.bot.send_message(chat_id=GROUP_CHAT_ID, text=response)
     session_history.append(("(evening check-in)", response))
 
     loop = asyncio.get_event_loop()
@@ -178,7 +181,7 @@ async def monday_weighin(app):
         f"One or two sentences only."
     )
     response = await run_claude(prompt)
-    await app.bot.send_message(chat_id=NEHA_CHAT_ID, text=response)
+    await app.bot.send_message(chat_id=GROUP_CHAT_ID, text=response)
     log.info("Monday weigh-in request sent")
 
 
@@ -186,7 +189,7 @@ async def monday_weighin(app):
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global cross_trainer_done_today
-    if update.effective_user.id != NEHA_CHAT_ID:
+    if update.effective_user.id not in AUTHORIZED_IDS:
         return
     text = update.message.text or ""
     if not text:
