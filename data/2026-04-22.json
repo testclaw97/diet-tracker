@@ -9,8 +9,8 @@
   "snacks": "4 oreo cookies",
   "snacks_kcal": 160,
   "total_kcal": 1660,
-  "cross_trainer": false,
-  "cross_trainer_minutes": 0,
+  "cross_trainer": true,
+  "cross_trainer_minutes": 30,
   "weight_kg": null,
   "notes": ""
 }
