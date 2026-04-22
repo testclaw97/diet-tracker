@@ -185,6 +185,39 @@ async def monday_weighin(app):
     log.info("Monday weigh-in request sent")
 
 
+# ── Meal extraction ───────────────────────────────────────────────
+
+async def extract_and_save_meals(user_text: str, bot_response: str):
+    prompt = (
+        f"Extract meal data from this conversation. Output ONLY valid JSON or the word null.\n\n"
+        f"User said: {user_text}\n"
+        f"Dietitian estimated: {bot_response}\n\n"
+        f"If food was mentioned, output JSON like:\n"
+        f'[{{"meal":"breakfast","description":"oats with banana","kcal":380}}]\n'
+        f"meal must be one of: breakfast, lunch, dinner, snacks\n"
+        f"Multiple meals in one message = multiple objects in the array.\n"
+        f"If no food was mentioned, output: null"
+    )
+    raw = await run_claude(prompt)
+    try:
+        raw = raw.strip()
+        if raw.lower() == "null" or not raw.startswith("["):
+            return
+        import json as _json
+        meals = _json.loads(raw)
+        for m in meals:
+            meal_key = m.get("meal")
+            if meal_key not in ("breakfast", "lunch", "dinner", "snacks"):
+                continue
+            memory.update_today(**{
+                meal_key: m.get("description", ""),
+                f"{meal_key}_kcal": int(m.get("kcal", 0))
+            })
+            log.info(f"Saved {meal_key}: {m.get('description')} ({m.get('kcal')} kcal)")
+    except Exception as e:
+        log.warning(f"Meal extraction failed: {e} — raw: {raw[:100]}")
+
+
 # ── Message handler ───────────────────────────────────────────────
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -222,6 +255,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     session_history.append((text, response))
     if len(session_history) > 5:
         session_history.pop(0)
+
+    # Extract and save meal data in background
+    asyncio.create_task(extract_and_save_meals(text, response))
 
 
 async def cmd_log(update: Update, context: ContextTypes.DEFAULT_TYPE):
