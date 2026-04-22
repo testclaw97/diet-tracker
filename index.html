@@ -5,173 +5,699 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Neha's Health Journey 🌸</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap');
-  :root {
-    --pink: #f48fb1; --light-pink: #fce4ec; --deep-pink: #c2185b;
-    --green: #81c784; --bg: #fff9fb; --card: #ffffff;
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Nunito', sans-serif; background: var(--bg); color: #333; }
-  .hero {
-    background: linear-gradient(135deg, #f48fb1, #f8bbd0, #fce4ec);
-    padding: 32px 20px 48px;
-    text-align: center;
-  }
-  .hero h1 { font-size: 1.8rem; font-weight: 800; color: #fff; text-shadow: 0 1px 4px rgba(0,0,0,.15); }
-  .hero p { color: #fff; margin-top: 6px; font-size: 0.95rem; opacity: .9; }
-  .flower { font-size: 2rem; }
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 16px; padding: 20px; max-width: 700px; margin: -24px auto 0; }
-  .card { background: var(--card); border-radius: 16px; padding: 18px; text-align: center;
-    box-shadow: 0 2px 12px rgba(244,143,177,.2); }
-  .card .val { font-size: 1.6rem; font-weight: 800; color: var(--deep-pink); }
-  .card .lbl { font-size: 0.78rem; color: #999; margin-top: 4px; }
-  .section { max-width: 700px; margin: 24px auto; padding: 0 20px; }
-  .section h2 { font-size: 1.1rem; font-weight: 700; color: var(--deep-pink); margin-bottom: 14px; }
-  .progress-wrap { background: #fce4ec; border-radius: 999px; height: 14px; overflow: hidden; }
-  .progress-bar { background: linear-gradient(90deg, var(--pink), var(--deep-pink));
-    height: 100%; border-radius: 999px; transition: width .5s; }
-  .progress-label { display: flex; justify-content: space-between; font-size: .78rem;
-    color: #999; margin-top: 5px; }
-  .meals-table { width: 100%; border-collapse: collapse; font-size: .88rem; }
-  .meals-table th { color: #999; font-weight: 600; text-align: left; padding: 6px 4px;
-    border-bottom: 1px solid #f0f0f0; }
-  .meals-table td { padding: 8px 4px; border-bottom: 1px solid #f9f0f3; }
-  .badge { display: inline-block; padding: 2px 10px; border-radius: 999px;
-    font-size: .75rem; font-weight: 700; }
-  .badge.green { background: #e8f5e9; color: #388e3c; }
-  .badge.red { background: #fce4ec; color: #c62828; }
-  canvas { max-width: 100%; }
-  .footer { text-align: center; padding: 32px; color: #ccc; font-size: .78rem; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --pink: #f48fb1; --light-pink: #fce4ec; --deep-pink: #c2185b;
+  --coral: #ff8a80; --rose: #e91e63; --lavender: #ce93d8;
+  --green: #66bb6a; --yellow: #ffa726; --red: #ef5350;
+  --bg: #fff9fb; --card: #ffffff; --text: #3d2b33; --muted: #a68a95;
+}
+body { font-family: 'Nunito', sans-serif; background: var(--bg); color: var(--text); }
+
+/* ── HERO ── */
+.hero {
+  background: linear-gradient(135deg, #f48fb1 0%, #f8bbd0 50%, #fce4ec 100%);
+  padding: 40px 20px 60px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+.hero::before {
+  content: "🌸🌷🌺🌸🌷🌺🌸🌷🌺🌸";
+  position: absolute; top: 8px; left: 0; right: 0;
+  font-size: 1.1rem; letter-spacing: 6px; opacity: .35;
+}
+.hero::after {
+  content: "🌸🌷🌺🌸🌷🌺🌸🌷🌺🌸";
+  position: absolute; bottom: 14px; left: 0; right: 0;
+  font-size: 1.1rem; letter-spacing: 6px; opacity: .35;
+}
+.hero h1 { font-size: 2rem; font-weight: 900; color: #fff; text-shadow: 0 2px 8px rgba(0,0,0,.18); }
+.hero .date-label { color: rgba(255,255,255,.85); font-size: .85rem; margin-top: 4px; font-weight: 600; letter-spacing: .5px; }
+.hero .subtitle { color: #fff; margin-top: 10px; font-size: 1rem; opacity: .95; font-weight: 700; }
+
+/* ── STAT CARDS ── */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px; padding: 0 16px;
+  max-width: 750px; margin: -30px auto 0;
+  position: relative; z-index: 10;
+}
+@media(min-width: 520px) { .cards { grid-template-columns: repeat(4, 1fr); } }
+.card {
+  background: var(--card); border-radius: 18px; padding: 18px 12px;
+  text-align: center; box-shadow: 0 4px 18px rgba(244,143,177,.22);
+  border: 1.5px solid #fce4ec;
+}
+.card .icon { font-size: 1.4rem; line-height: 1; }
+.card .val { font-size: 1.55rem; font-weight: 900; color: var(--deep-pink); margin-top: 4px; line-height: 1.1; }
+.card .lbl { font-size: .72rem; color: var(--muted); margin-top: 5px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; }
+.card .sub { font-size: .7rem; color: var(--muted); margin-top: 3px; }
+
+/* ── SECTION ── */
+.section { max-width: 750px; margin: 22px auto 0; padding: 0 16px; }
+.section-card {
+  background: var(--card); border-radius: 18px; padding: 20px;
+  box-shadow: 0 3px 14px rgba(244,143,177,.16); border: 1.5px solid #fce4ec;
+}
+.section-title {
+  font-size: 1rem; font-weight: 800; color: var(--deep-pink);
+  margin-bottom: 16px; display: flex; align-items: center; gap: 8px;
+}
+
+/* ── BUDGET BAR ── */
+.budget-bar-wrap {
+  background: #fce4ec; border-radius: 12px; height: 28px;
+  overflow: hidden; position: relative; margin-bottom: 10px;
+}
+.budget-bar-inner {
+  display: flex; height: 100%; border-radius: 12px;
+  overflow: hidden; transition: all .5s;
+}
+.budget-seg { height: 100%; transition: width .5s; position: relative; }
+.budget-seg.breakfast { background: #ff8a80; }
+.budget-seg.lunch     { background: #f48fb1; }
+.budget-seg.dinner    { background: #e91e63; opacity: .8; }
+.budget-seg.snacks    { background: #ce93d8; }
+.budget-goal-line {
+  position: absolute; top: 0; bottom: 0; width: 2px;
+  background: rgba(255,255,255,.9); z-index: 5; pointer-events: none;
+}
+.budget-labels {
+  display: flex; justify-content: space-between;
+  font-size: .72rem; color: var(--muted); font-weight: 700; margin-bottom: 14px;
+}
+.budget-status {
+  display: inline-block; padding: 4px 14px; border-radius: 999px;
+  font-size: .82rem; font-weight: 800; margin-bottom: 16px;
+}
+.budget-status.green { background: #e8f5e9; color: #2e7d32; }
+.budget-status.yellow { background: #fff8e1; color: #f57c00; }
+.budget-status.red { background: #fce4ec; color: #c62828; }
+
+.meal-rows { display: flex; flex-direction: column; gap: 8px; }
+.meal-row {
+  display: flex; align-items: center; gap: 10px;
+  background: #fff9fb; border-radius: 10px; padding: 10px 14px;
+  border: 1px solid #fce4ec;
+}
+.meal-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+.meal-dot.breakfast { background: #ff8a80; }
+.meal-dot.lunch     { background: #f48fb1; }
+.meal-dot.dinner    { background: #e91e63; }
+.meal-dot.snacks    { background: #ce93d8; }
+.meal-name { flex: 1; font-size: .88rem; font-weight: 700; color: var(--text); }
+.meal-sub  { font-size: .78rem; color: var(--muted); }
+.meal-kcal { font-size: .9rem; font-weight: 800; color: var(--deep-pink); }
+
+/* ── WEEK GRID ── */
+.week-grid {
+  display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px;
+}
+.week-day {
+  background: #f5f5f5; border-radius: 12px; padding: 10px 4px;
+  text-align: center; font-size: .7rem; border: 1.5px solid transparent;
+}
+.week-day.green { background: #e8f5e9; border-color: #a5d6a7; }
+.week-day.red   { background: #fce4ec; border-color: #f48fb1; }
+.week-day.today { box-shadow: 0 0 0 2px var(--deep-pink); }
+.week-day .wd-label { font-weight: 800; color: var(--muted); font-size: .65rem; text-transform: uppercase; }
+.week-day .wd-date  { font-size: .72rem; font-weight: 700; color: var(--text); margin: 2px 0; }
+.week-day .wd-kcal  { font-size: .7rem; font-weight: 800; }
+.week-day.green .wd-kcal { color: #2e7d32; }
+.week-day.red   .wd-kcal { color: #c62828; }
+.week-day .wd-ct   { font-size: .85rem; margin-top: 3px; }
+
+/* ── CHART CONTAINER ── */
+.chart-wrap { position: relative; width: 100%; }
+canvas { max-width: 100%; }
+
+/* ── CT GRID ── */
+.ct-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+.ct-dot {
+  width: 36px; height: 36px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1rem; font-weight: 700; flex-direction: column;
+  font-size: .6rem;
+}
+.ct-dot.done { background: #e8f5e9; border: 2px solid #a5d6a7; }
+.ct-dot.miss { background: #fce4ec; border: 2px solid #f48fb1; }
+.ct-dot.none { background: #f5f5f5; border: 2px solid #e0e0e0; }
+.ct-dot span.ico { font-size: 1rem; }
+.ct-dot span.lbl { font-size: .55rem; color: var(--muted); font-weight: 700; }
+.ct-stats { display: flex; gap: 16px; margin-top: 14px; flex-wrap: wrap; }
+.ct-stat { text-align: center; }
+.ct-stat .v { font-size: 1.3rem; font-weight: 900; color: var(--deep-pink); }
+.ct-stat .l { font-size: .7rem; color: var(--muted); font-weight: 700; text-transform: uppercase; }
+
+/* ── WEIGHT PROGRESS BAR ── */
+.weight-track { margin-bottom: 16px; }
+.weight-bar-bg { background: #fce4ec; border-radius: 999px; height: 12px; overflow: hidden; }
+.weight-bar-fill { background: linear-gradient(90deg, var(--pink), var(--deep-pink)); height: 100%; border-radius: 999px; transition: width .6s; }
+.weight-track-labels { display: flex; justify-content: space-between; font-size: .75rem; color: var(--muted); font-weight: 700; margin-top: 5px; }
+
+/* ── HISTORY TABLE ── */
+.hist-table { width: 100%; border-collapse: collapse; font-size: .8rem; }
+.hist-table th {
+  color: var(--muted); font-weight: 800; text-align: left;
+  padding: 6px 6px; border-bottom: 2px solid #fce4ec;
+  font-size: .7rem; text-transform: uppercase; letter-spacing: .3px;
+}
+.hist-table td { padding: 9px 6px; border-bottom: 1px solid #fdf0f5; vertical-align: top; }
+.hist-table tr:last-child td { border-bottom: none; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: .7rem; font-weight: 800; }
+.badge.green { background: #e8f5e9; color: #2e7d32; }
+.badge.red   { background: #fce4ec; color: #c62828; }
+.badge.yellow{ background: #fff8e1; color: #f57c00; }
+.kcal-over { color: #c62828; font-weight: 800; }
+.kcal-ok   { color: #2e7d32; font-weight: 800; }
+
+/* ── FOOTER ── */
+.footer {
+  text-align: center; padding: 36px 20px 40px;
+  font-size: .95rem; font-weight: 700; color: var(--pink);
+}
+
+/* ── LEGEND ── */
+.legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+.legend-item { display: flex; align-items: center; gap: 5px; font-size: .75rem; font-weight: 700; color: var(--muted); }
+.legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+.empty-state { text-align: center; padding: 20px; color: var(--muted); font-size: .88rem; font-weight: 600; }
+
+/* spacing */
+.mt8 { margin-top: 8px; }
+.mt12 { margin-top: 12px; }
 </style>
 </head>
 <body>
 
+<!-- ── 1. HERO ── -->
 <div class="hero">
-  <div class="flower">🌸</div>
-  <h1>Neha's Health Journey</h1>
-  <p id="subtitle">Loading your progress...</p>
+  <h1>🌸 Neha's Health Journey 🌸</h1>
+  <div class="date-label" id="hero-date"></div>
+  <div class="subtitle" id="hero-subtitle">Loading your progress...</div>
 </div>
 
+<!-- ── 2. STAT CARDS ── -->
 <div class="cards">
-  <div class="card"><div class="val" id="today-kcal">—</div><div class="lbl">kcal today</div></div>
-  <div class="card"><div class="val" id="ct-streak">—</div><div class="lbl">day streak 🏃</div></div>
-  <div class="card"><div class="val" id="kg-lost">—</div><div class="lbl">kg lost 💪</div></div>
-  <div class="card"><div class="val" id="days-left">—</div><div class="lbl">days to goal</div></div>
+  <div class="card">
+    <div class="icon">🔥</div>
+    <div class="val" id="card-kcal">—</div>
+    <div class="lbl">kcal today</div>
+    <div class="sub" id="card-kcal-sub"></div>
+  </div>
+  <div class="card">
+    <div class="icon">🏃‍♀️</div>
+    <div class="val" id="card-streak">—</div>
+    <div class="lbl">day streak</div>
+    <div class="sub">cross trainer</div>
+  </div>
+  <div class="card">
+    <div class="icon">⚖️</div>
+    <div class="val" id="card-lost">—</div>
+    <div class="lbl">kg lost</div>
+    <div class="sub" id="card-weight-sub"></div>
+  </div>
+  <div class="card">
+    <div class="icon">🎯</div>
+    <div class="val" id="card-days">—</div>
+    <div class="lbl">days to goal</div>
+    <div class="sub">Aug 10 target</div>
+  </div>
 </div>
 
+<!-- ── 3. TODAY'S CALORIE BUDGET ── -->
+<div class="section" style="margin-top:28px;">
+  <div class="section-card">
+    <div class="section-title">🍽️ Today's Calorie Budget</div>
+    <div id="budget-status-badge" class="budget-status green">Loading…</div>
+    <div class="budget-bar-wrap">
+      <div class="budget-bar-inner" id="budget-bar">
+        <div class="budget-seg breakfast" id="seg-breakfast" style="width:0%"></div>
+        <div class="budget-seg lunch"     id="seg-lunch"     style="width:0%"></div>
+        <div class="budget-seg dinner"    id="seg-dinner"    style="width:0%"></div>
+        <div class="budget-seg snacks"    id="seg-snacks"    style="width:0%"></div>
+      </div>
+      <div class="budget-goal-line" id="goal-line" style="left:0%"></div>
+    </div>
+    <div class="budget-labels">
+      <span>0</span><span>700</span><span id="bar-limit-label">1400 kcal goal</span>
+    </div>
+    <div class="meal-rows" id="meal-rows">
+      <div class="empty-state">No data for today yet 🌷</div>
+    </div>
+    <div class="legend mt12">
+      <div class="legend-item"><div class="legend-dot" style="background:#ff8a80"></div>Breakfast</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#f48fb1"></div>Lunch</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#e91e63;opacity:.8"></div>Dinner</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#ce93d8"></div>Snacks</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── 4. WEEK AT A GLANCE ── -->
 <div class="section">
-  <h2>🎯 Weight Progress</h2>
-  <div class="progress-wrap"><div class="progress-bar" id="weight-bar" style="width:0%"></div></div>
-  <div class="progress-label"><span>88 kg</span><span id="weight-now">—</span><span>65 kg</span></div>
+  <div class="section-card">
+    <div class="section-title">📅 This Week at a Glance</div>
+    <div class="week-grid" id="week-grid"></div>
+  </div>
 </div>
 
+<!-- ── 5. 14-DAY CALORIE CHART ── -->
 <div class="section">
-  <h2>🔥 Calories — Last 7 Days</h2>
-  <canvas id="kcalChart" height="180"></canvas>
+  <div class="section-card">
+    <div class="section-title">📊 14-Day Calorie Chart</div>
+    <div class="chart-wrap">
+      <canvas id="kcalChart" height="200"></canvas>
+    </div>
+  </div>
 </div>
 
+<!-- ── 6. CROSS TRAINER ── -->
 <div class="section">
-  <h2>🥗 Recent Meals</h2>
-  <table class="meals-table">
-    <thead><tr><th>Date</th><th>Meals</th><th>kcal</th><th>🏃</th></tr></thead>
-    <tbody id="meals-tbody"></tbody>
-  </table>
+  <div class="section-card">
+    <div class="section-title">🏃‍♀️ Cross Trainer — Last 14 Days</div>
+    <div class="ct-grid" id="ct-grid"></div>
+    <div class="ct-stats">
+      <div class="ct-stat"><div class="v" id="ct-streak2">—</div><div class="l">Day Streak 🔥</div></div>
+      <div class="ct-stat"><div class="v" id="ct-week">—</div><div class="l">This Week</div></div>
+      <div class="ct-stat"><div class="v" id="ct-total">—</div><div class="l">Last 14 Days</div></div>
+    </div>
+  </div>
 </div>
 
-<div class="footer">🌷 You're doing amazing, Neha! 🌷</div>
+<!-- ── 7. WEIGHT JOURNEY ── -->
+<div class="section">
+  <div class="section-card">
+    <div class="section-title">⚖️ Weight Journey</div>
+    <div class="weight-track">
+      <div class="weight-bar-bg"><div class="weight-bar-fill" id="weight-bar-fill" style="width:0%"></div></div>
+      <div class="weight-track-labels"><span>88 kg (start)</span><span id="wt-current">— kg</span><span>65 kg (goal)</span></div>
+    </div>
+    <div class="chart-wrap">
+      <canvas id="weightChart" height="200"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- ── 8. MEAL HISTORY ── -->
+<div class="section">
+  <div class="section-card">
+    <div class="section-title">📋 Meal History — Last 7 Days</div>
+    <div style="overflow-x:auto;">
+      <table class="hist-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Breakfast</th>
+            <th>Lunch</th>
+            <th>Dinner</th>
+            <th>Snacks</th>
+            <th>Total</th>
+            <th>CT</th>
+          </tr>
+        </thead>
+        <tbody id="hist-tbody">
+          <tr><td colspan="7" class="empty-state">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ── 9. FOOTER ── -->
+<div class="footer">🌷 You're doing amazing, Neha! Keep going — 65 kg is waiting for you! 🌺</div>
 
 <script>
-const GOAL_KG = 65, START_KG = 88, GOAL_DATE = new Date("2026-08-10");
+const GOAL_KG = 65, START_KG = 88, GOAL_DATE = new Date("2026-08-10"), KCAL_GOAL = 1400;
+const DAY_NAMES = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+const MON_START = true; // week starts Monday
 
 function daysLeft() {
   return Math.max(0, Math.round((GOAL_DATE - new Date()) / 86400000));
 }
 
-async function loadDay(dateStr) {
+function dateStr(offset = 0) {
+  const d = new Date();
+  d.setDate(d.getDate() + offset);
+  return d.toISOString().slice(0, 10);
+}
+
+function fmtDate(str) {
+  const d = new Date(str + "T00:00:00");
+  return `${DAY_NAMES[d.getDay()]} ${d.getDate()}/${d.getMonth()+1}`;
+}
+
+function fmtDateShort(str) {
+  const d = new Date(str + "T00:00:00");
+  return `${d.getDate()}/${d.getMonth()+1}`;
+}
+
+async function loadDay(ds) {
   try {
-    const r = await fetch(`data/${dateStr}.json?t=${Date.now()}`);
+    const r = await fetch(`data/${ds}.json?t=${Date.now()}`);
     if (!r.ok) return null;
     return await r.json();
   } catch { return null; }
 }
 
-function dateStr(offset = 0) {
-  const d = new Date(); d.setDate(d.getDate() + offset);
-  return d.toISOString().slice(0, 10);
+async function loadRange(n) {
+  const out = [];
+  for (let i = n - 1; i >= 0; i--) {
+    const ds = dateStr(-i);
+    const data = await loadDay(ds);
+    out.push({ date: ds, data });
+  }
+  return out;
 }
 
-async function init() {
-  const days = [];
-  for (let i = 6; i >= 0; i--) {
-    const d = await loadDay(dateStr(-i));
-    days.push({ date: dateStr(-i), data: d });
-  }
+// ── HERO ──
+function buildHero(days14, latestWeight) {
+  const todayStr = dateStr(0);
+  const d = new Date(todayStr + "T00:00:00");
+  document.getElementById("hero-date").textContent =
+    `${DAY_NAMES[d.getDay()]}, ${d.getDate()} ${d.toLocaleString("en",{month:"long"})} 2026`;
 
-  const today = days[days.length - 1].data;
-  document.getElementById("today-kcal").textContent = today ? today.total_kcal || 0 : 0;
-  document.getElementById("days-left").textContent = daysLeft();
+  const lost = latestWeight ? +(START_KG - latestWeight).toFixed(1) : 0;
+  const dl = daysLeft();
+  let sub;
+  if (lost >= 5) sub = `✨ ${lost} kg lost — you're crushing it! ${dl} days to go 🌷`;
+  else if (lost > 0) sub = `🌸 ${lost} kg lost so far — keep going! ${dl} days to goal`;
+  else sub = `🌺 Journey begins! ${dl} days to August 10 — let's do this!`;
+  document.getElementById("hero-subtitle").textContent = sub;
+}
 
-  // Cross trainer streak
+// ── STAT CARDS ──
+function buildCards(days7, days14, latestWeight) {
+  const today = days7[days7.length - 1].data;
+  const todayKcal = today?.total_kcal || 0;
+  const remaining = KCAL_GOAL - todayKcal;
+  document.getElementById("card-kcal").textContent = todayKcal || "—";
+  document.getElementById("card-kcal-sub").textContent =
+    todayKcal ? (remaining >= 0 ? `${remaining} kcal left` : `${Math.abs(remaining)} over goal`) : "no data yet";
+
+  // streak
   let streak = 0;
-  for (let i = days.length - 1; i >= 0; i--) {
-    if (days[i].data?.cross_trainer) streak++; else break;
+  for (let i = days14.length - 1; i >= 0; i--) {
+    if (days14[i].data?.cross_trainer) streak++; else break;
   }
-  document.getElementById("ct-streak").textContent = streak;
+  document.getElementById("card-streak").textContent = streak || "0";
 
-  // Weight progress
-  let latestWeight = null;
-  for (let i = days.length - 1; i >= 0; i--) {
-    if (days[i].data?.weight_kg) { latestWeight = days[i].data.weight_kg; break; }
-  }
-  const lost = latestWeight ? (START_KG - latestWeight).toFixed(1) : "0";
-  document.getElementById("kg-lost").textContent = lost;
-  if (latestWeight) {
-    const pct = Math.max(0, Math.min(100, ((START_KG - latestWeight) / (START_KG - GOAL_KG)) * 100));
-    document.getElementById("weight-bar").style.width = pct + "%";
-    document.getElementById("weight-now").textContent = latestWeight + " kg";
-    document.getElementById("subtitle").textContent =
-      `${lost} kg lost · ${daysLeft()} days to go · You got this! 🌸`;
+  // weight
+  const lost = latestWeight ? +(START_KG - latestWeight).toFixed(1) : null;
+  document.getElementById("card-lost").textContent = lost != null ? `${lost} kg` : "—";
+  document.getElementById("card-weight-sub").textContent =
+    latestWeight ? `now ${latestWeight} kg` : "no weight logged";
+
+  document.getElementById("card-days").textContent = daysLeft();
+
+  return { streak };
+}
+
+// ── BUDGET BAR ──
+function buildBudget(today) {
+  const LIMIT = KCAL_GOAL;
+  const bkfast = today?.breakfast_kcal || 0;
+  const lunch  = today?.lunch_kcal    || 0;
+  const dinner = today?.dinner_kcal   || 0;
+  const snacks = today?.snacks_kcal   || 0;
+  const total  = today?.total_kcal    || (bkfast + lunch + dinner + snacks);
+
+  // bar scale: max is either goal or total (whichever larger), capped at 2x goal
+  const scale = Math.max(LIMIT, total, 1);
+  const toW = k => Math.min(100, (k / scale) * 100).toFixed(1) + "%";
+
+  document.getElementById("seg-breakfast").style.width = toW(bkfast);
+  document.getElementById("seg-lunch").style.width     = toW(lunch);
+  document.getElementById("seg-dinner").style.width    = toW(dinner);
+  document.getElementById("seg-snacks").style.width    = toW(snacks);
+
+  // goal line
+  const goalPct = Math.min(100, (LIMIT / scale) * 100).toFixed(1);
+  document.getElementById("goal-line").style.left = goalPct + "%";
+
+  // status badge
+  const badge = document.getElementById("budget-status-badge");
+  if (!today) {
+    badge.textContent = "No data yet 🌷";
+    badge.className = "budget-status yellow";
+  } else if (total <= 1200) {
+    badge.textContent = `✅ ${total} / ${LIMIT} kcal — great job!`;
+    badge.className = "budget-status green";
+  } else if (total <= LIMIT) {
+    badge.textContent = `✅ ${total} / ${LIMIT} kcal — on track`;
+    badge.className = "budget-status yellow";
   } else {
-    document.getElementById("subtitle").textContent = `${daysLeft()} days to August 10 · Let's go! 🌸`;
+    badge.textContent = `⚠️ ${total} / ${LIMIT} kcal — ${total - LIMIT} over`;
+    badge.className = "budget-status red";
   }
 
-  // Calorie chart
-  const labels = days.map(d => d.date.slice(5));
-  const kcals = days.map(d => d.data?.total_kcal || 0);
+  // meal rows
+  const rows = document.getElementById("meal-rows");
+  if (!today) { rows.innerHTML = `<div class="empty-state">No data for today yet 🌷</div>`; return; }
+  const meals = [
+    { cls:"breakfast", icon:"🌅", label:"Breakfast", name:today.breakfast, kcal:bkfast },
+    { cls:"lunch",     icon:"☀️", label:"Lunch",     name:today.lunch,     kcal:lunch  },
+    { cls:"dinner",    icon:"🌙", label:"Dinner",    name:today.dinner,    kcal:dinner },
+    { cls:"snacks",    icon:"🍬", label:"Snacks",    name:today.snacks,    kcal:snacks },
+  ];
+  rows.innerHTML = meals.map(m => m.name ? `
+    <div class="meal-row">
+      <div class="meal-dot ${m.cls}"></div>
+      <div>
+        <div class="meal-name">${m.icon} ${m.label} — <span style="font-weight:600;color:var(--muted)">${m.name}</span></div>
+      </div>
+      <div class="meal-kcal">${m.kcal} kcal</div>
+    </div>` : "").join("");
+}
+
+// ── WEEK GRID ──
+function buildWeekGrid(days7) {
+  const grid = document.getElementById("week-grid");
+  const todayStr = dateStr(0);
+  // build Mon-Sun for the current week
+  const today = new Date(todayStr + "T00:00:00");
+  const dayOfWeek = today.getDay(); // 0=Sun
+  const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  const weekDates = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(today);
+    d.setDate(today.getDate() + mondayOffset + i);
+    weekDates.push(d.toISOString().slice(0, 10));
+  }
+  const byDate = {};
+  days7.forEach(x => { if (x.data) byDate[x.date] = x.data; });
+  const dayLabels = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+
+  grid.innerHTML = weekDates.map((ds, i) => {
+    const d = byDate[ds];
+    const isToday = ds === todayStr;
+    let cls = "week-day";
+    if (d) cls += d.total_kcal <= KCAL_GOAL ? " green" : " red";
+    if (isToday) cls += " today";
+    const kcalTxt = d ? d.total_kcal : "—";
+    const ct = d ? (d.cross_trainer ? "✅" : "❌") : "·";
+    return `<div class="${cls}">
+      <div class="wd-label">${dayLabels[i]}</div>
+      <div class="wd-date">${fmtDateShort(ds)}</div>
+      <div class="wd-kcal">${kcalTxt}</div>
+      <div class="wd-ct">${ct}</div>
+    </div>`;
+  }).join("");
+}
+
+// ── 14-DAY KCAL CHART ──
+function buildKcalChart(days14) {
+  const labels = days14.map(d => fmtDateShort(d.date));
+  const kcals  = days14.map(d => d.data?.total_kcal || null);
   new Chart(document.getElementById("kcalChart"), {
     type: "bar",
     data: {
       labels,
-      datasets: [{
-        label: "kcal",
-        data: kcals,
-        backgroundColor: kcals.map(k => k > 1400 ? "#f48fb1" : "#f8bbd0"),
-        borderRadius: 8,
-      }, {
-        label: "goal (1400)",
-        data: Array(7).fill(1400),
-        type: "line",
-        borderColor: "#c2185b",
-        borderDash: [5, 5],
-        pointRadius: 0,
-        fill: false,
-      }]
+      datasets: [
+        {
+          label: "kcal",
+          data: kcals,
+          backgroundColor: kcals.map(k => k === null ? "#f5f5f5" : k > KCAL_GOAL ? "#f48fb1" : "#f8bbd0"),
+          borderColor:     kcals.map(k => k === null ? "#e0e0e0" : k > KCAL_GOAL ? "#c2185b" : "#f48fb1"),
+          borderWidth: 1.5,
+          borderRadius: 8,
+        },
+        {
+          label: "Goal (1400)",
+          data: Array(14).fill(KCAL_GOAL),
+          type: "line",
+          borderColor: "#c2185b",
+          borderDash: [6, 4],
+          borderWidth: 2,
+          pointRadius: 0,
+          fill: false,
+          tension: 0,
+        }
+      ]
     },
-    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+    options: {
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => ctx.dataset.type === "line" ? `Goal: ${ctx.raw} kcal` : `${ctx.raw ?? "no data"} kcal`
+          }
+        }
+      },
+      scales: {
+        y: { beginAtZero: true, grid: { color: "#fce4ec" }, ticks: { color: "#a68a95" } },
+        x: { grid: { display: false }, ticks: { color: "#a68a95", font: { size: 10 } } }
+      }
+    }
   });
+}
 
-  // Meals table
-  const tbody = document.getElementById("meals-tbody");
-  [...days].reverse().forEach(({ date, data }) => {
-    if (!data) return;
-    const meals = [data.breakfast, data.lunch, data.dinner].filter(Boolean).join(", ") || "—";
-    const ct = data.cross_trainer
-      ? `<span class="badge green">✅ ${data.cross_trainer_minutes}min</span>`
-      : `<span class="badge red">❌</span>`;
-    tbody.innerHTML += `<tr><td>${date.slice(5)}</td><td>${meals}</td><td>${data.total_kcal||0}</td><td>${ct}</td></tr>`;
+// ── CROSS TRAINER GRID ──
+function buildCTGrid(days14, streak) {
+  const grid = document.getElementById("ct-grid");
+  const todayStr = dateStr(0);
+  grid.innerHTML = days14.map(({ date, data }) => {
+    let cls, ico, lbl;
+    if (!data) { cls = "none"; ico = "·"; lbl = fmtDateShort(date); }
+    else if (data.cross_trainer) { cls = "done"; ico = "✅"; lbl = fmtDateShort(date); }
+    else { cls = "miss"; ico = "❌"; lbl = fmtDateShort(date); }
+    return `<div class="ct-dot ${cls}${date === todayStr ? " today" : ""}">
+      <span class="ico">${ico}</span><span class="lbl">${lbl}</span>
+    </div>`;
+  }).join("");
+
+  const thisWeek = days14.slice(-7).filter(d => d.data?.cross_trainer).length;
+  const total14  = days14.filter(d => d.data?.cross_trainer).length;
+  document.getElementById("ct-streak2").textContent = streak;
+  document.getElementById("ct-week").textContent = thisWeek + "/7";
+  document.getElementById("ct-total").textContent = total14 + "/14";
+}
+
+// ── WEIGHT CHART ──
+function buildWeightChart(days14, latestWeight) {
+  // progress bar
+  if (latestWeight) {
+    const pct = Math.max(0, Math.min(100, ((START_KG - latestWeight) / (START_KG - GOAL_KG)) * 100));
+    document.getElementById("weight-bar-fill").style.width = pct.toFixed(1) + "%";
+    document.getElementById("wt-current").textContent = latestWeight + " kg";
+  } else {
+    document.getElementById("wt-current").textContent = "—";
+  }
+
+  const withWeight = days14.filter(d => d.data?.weight_kg != null);
+  if (withWeight.length === 0) {
+    document.getElementById("weightChart").parentElement.innerHTML =
+      `<div class="empty-state" style="padding:30px">No weight logged yet — log your weight to see the chart 🌸</div>`;
+    return;
+  }
+
+  const labels = withWeight.map(d => fmtDateShort(d.date));
+  const weights = withWeight.map(d => d.data.weight_kg);
+  const allW = [START_KG, ...weights];
+  const yMin = Math.min(GOAL_KG - 1, ...weights);
+  const yMax = Math.max(START_KG + 1, ...weights);
+
+  new Chart(document.getElementById("weightChart"), {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "Weight",
+          data: weights,
+          borderColor: "#f48fb1",
+          backgroundColor: "rgba(244,143,177,.12)",
+          borderWidth: 2.5,
+          pointBackgroundColor: "#c2185b",
+          pointRadius: 5,
+          tension: 0.35,
+          fill: true,
+        },
+        {
+          label: "Goal (65 kg)",
+          data: Array(labels.length).fill(GOAL_KG),
+          borderColor: "#66bb6a",
+          borderDash: [6, 4],
+          borderWidth: 1.5,
+          pointRadius: 0,
+          fill: false,
+        }
+      ]
+    },
+    options: {
+      plugins: { legend: { display: false } },
+      scales: {
+        y: {
+          min: yMin, max: yMax,
+          grid: { color: "#fce4ec" },
+          ticks: { color: "#a68a95", callback: v => v + " kg" }
+        },
+        x: { grid: { display: false }, ticks: { color: "#a68a95", font: { size: 10 } } }
+      }
+    }
   });
+}
+
+// ── MEAL HISTORY TABLE ──
+function buildHistTable(days7) {
+  const tbody = document.getElementById("hist-tbody");
+  const rows = [...days7].reverse();
+  if (!rows.some(r => r.data)) {
+    tbody.innerHTML = `<tr><td colspan="7" class="empty-state">No history yet 🌷</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows.map(({ date, data }) => {
+    if (!data) return `<tr><td>${fmtDateShort(date)}</td><td colspan="5" style="color:var(--muted);font-style:italic">no data</td><td>—</td></tr>`;
+    const total = data.total_kcal || 0;
+    const over  = total > KCAL_GOAL;
+    const ct    = data.cross_trainer
+      ? `<span class="badge green">✅ ${data.cross_trainer_minutes ? data.cross_trainer_minutes+"m" : "yes"}</span>`
+      : `<span class="badge red">❌</span>`;
+    const totalBadge = over
+      ? `<span class="kcal-over">${total}</span>`
+      : `<span class="kcal-ok">${total}</span>`;
+    const fmt = (name, k) => name ? `${name}<br><small style="color:var(--muted)">${k} kcal</small>` : `<span style="color:#e0e0e0">—</span>`;
+    return `<tr>
+      <td style="font-weight:700;white-space:nowrap">${fmtDateShort(date)}</td>
+      <td>${fmt(data.breakfast, data.breakfast_kcal)}</td>
+      <td>${fmt(data.lunch, data.lunch_kcal)}</td>
+      <td>${fmt(data.dinner, data.dinner_kcal)}</td>
+      <td>${fmt(data.snacks, data.snacks_kcal)}</td>
+      <td>${totalBadge}</td>
+      <td>${ct}</td>
+    </tr>`;
+  }).join("");
+}
+
+// ── MAIN ──
+async function init() {
+  const [days14, days7base] = await Promise.all([
+    loadRange(14),
+    loadRange(7),
+  ]);
+  const days7 = days14.slice(-7);
+
+  // find latest weight
+  let latestWeight = null;
+  for (let i = days14.length - 1; i >= 0; i--) {
+    if (days14[i].data?.weight_kg != null) { latestWeight = days14[i].data.weight_kg; break; }
+  }
+
+  const today = days14[days14.length - 1].data;
+
+  buildHero(days14, latestWeight);
+  const { streak } = buildCards(days7, days14, latestWeight);
+  buildBudget(today);
+  buildWeekGrid(days7);
+  buildKcalChart(days14);
+  buildCTGrid(days14, streak);
+  buildWeightChart(days14, latestWeight);
+  buildHistTable(days7);
 }
 
 init();
