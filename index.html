@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Neha's Health Journey 🌸</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap');
+  :root {
+    --pink: #f48fb1; --light-pink: #fce4ec; --deep-pink: #c2185b;
+    --green: #81c784; --bg: #fff9fb; --card: #ffffff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Nunito', sans-serif; background: var(--bg); color: #333; }
+  .hero {
+    background: linear-gradient(135deg, #f48fb1, #f8bbd0, #fce4ec);
+    padding: 32px 20px 48px;
+    text-align: center;
+  }
+  .hero h1 { font-size: 1.8rem; font-weight: 800; color: #fff; text-shadow: 0 1px 4px rgba(0,0,0,.15); }
+  .hero p { color: #fff; margin-top: 6px; font-size: 0.95rem; opacity: .9; }
+  .flower { font-size: 2rem; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 16px; padding: 20px; max-width: 700px; margin: -24px auto 0; }
+  .card { background: var(--card); border-radius: 16px; padding: 18px; text-align: center;
+    box-shadow: 0 2px 12px rgba(244,143,177,.2); }
+  .card .val { font-size: 1.6rem; font-weight: 800; color: var(--deep-pink); }
+  .card .lbl { font-size: 0.78rem; color: #999; margin-top: 4px; }
+  .section { max-width: 700px; margin: 24px auto; padding: 0 20px; }
+  .section h2 { font-size: 1.1rem; font-weight: 700; color: var(--deep-pink); margin-bottom: 14px; }
+  .progress-wrap { background: #fce4ec; border-radius: 999px; height: 14px; overflow: hidden; }
+  .progress-bar { background: linear-gradient(90deg, var(--pink), var(--deep-pink));
+    height: 100%; border-radius: 999px; transition: width .5s; }
+  .progress-label { display: flex; justify-content: space-between; font-size: .78rem;
+    color: #999; margin-top: 5px; }
+  .meals-table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+  .meals-table th { color: #999; font-weight: 600; text-align: left; padding: 6px 4px;
+    border-bottom: 1px solid #f0f0f0; }
+  .meals-table td { padding: 8px 4px; border-bottom: 1px solid #f9f0f3; }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 999px;
+    font-size: .75rem; font-weight: 700; }
+  .badge.green { background: #e8f5e9; color: #388e3c; }
+  .badge.red { background: #fce4ec; color: #c62828; }
+  canvas { max-width: 100%; }
+  .footer { text-align: center; padding: 32px; color: #ccc; font-size: .78rem; }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="flower">🌸</div>
+  <h1>Neha's Health Journey</h1>
+  <p id="subtitle">Loading your progress...</p>
+</div>
+
+<div class="cards">
+  <div class="card"><div class="val" id="today-kcal">—</div><div class="lbl">kcal today</div></div>
+  <div class="card"><div class="val" id="ct-streak">—</div><div class="lbl">day streak 🏃</div></div>
+  <div class="card"><div class="val" id="kg-lost">—</div><div class="lbl">kg lost 💪</div></div>
+  <div class="card"><div class="val" id="days-left">—</div><div class="lbl">days to goal</div></div>
+</div>
+
+<div class="section">
+  <h2>🎯 Weight Progress</h2>
+  <div class="progress-wrap"><div class="progress-bar" id="weight-bar" style="width:0%"></div></div>
+  <div class="progress-label"><span>88 kg</span><span id="weight-now">—</span><span>65 kg</span></div>
+</div>
+
+<div class="section">
+  <h2>🔥 Calories — Last 7 Days</h2>
+  <canvas id="kcalChart" height="180"></canvas>
+</div>
+
+<div class="section">
+  <h2>🥗 Recent Meals</h2>
+  <table class="meals-table">
+    <thead><tr><th>Date</th><th>Meals</th><th>kcal</th><th>🏃</th></tr></thead>
+    <tbody id="meals-tbody"></tbody>
+  </table>
+</div>
+
+<div class="footer">🌷 You're doing amazing, Neha! 🌷</div>
+
+<script>
+const GOAL_KG = 65, START_KG = 88, GOAL_DATE = new Date("2026-08-10");
+
+function daysLeft() {
+  return Math.max(0, Math.round((GOAL_DATE - new Date()) / 86400000));
+}
+
+async function loadDay(dateStr) {
+  try {
+    const r = await fetch(`data/${dateStr}.json?t=${Date.now()}`);
+    if (!r.ok) return null;
+    return await r.json();
+  } catch { return null; }
+}
+
+function dateStr(offset = 0) {
+  const d = new Date(); d.setDate(d.getDate() + offset);
+  return d.toISOString().slice(0, 10);
+}
+
+async function init() {
+  const days = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = await loadDay(dateStr(-i));
+    days.push({ date: dateStr(-i), data: d });
+  }
+
+  const today = days[days.length - 1].data;
+  document.getElementById("today-kcal").textContent = today ? today.total_kcal || 0 : 0;
+  document.getElementById("days-left").textContent = daysLeft();
+
+  // Cross trainer streak
+  let streak = 0;
+  for (let i = days.length - 1; i >= 0; i--) {
+    if (days[i].data?.cross_trainer) streak++; else break;
+  }
+  document.getElementById("ct-streak").textContent = streak;
+
+  // Weight progress
+  let latestWeight = null;
+  for (let i = days.length - 1; i >= 0; i--) {
+    if (days[i].data?.weight_kg) { latestWeight = days[i].data.weight_kg; break; }
+  }
+  const lost = latestWeight ? (START_KG - latestWeight).toFixed(1) : "0";
+  document.getElementById("kg-lost").textContent = lost;
+  if (latestWeight) {
+    const pct = Math.max(0, Math.min(100, ((START_KG - latestWeight) / (START_KG - GOAL_KG)) * 100));
+    document.getElementById("weight-bar").style.width = pct + "%";
+    document.getElementById("weight-now").textContent = latestWeight + " kg";
+    document.getElementById("subtitle").textContent =
+      `${lost} kg lost · ${daysLeft()} days to go · You got this! 🌸`;
+  } else {
+    document.getElementById("subtitle").textContent = `${daysLeft()} days to August 10 · Let's go! 🌸`;
+  }
+
+  // Calorie chart
+  const labels = days.map(d => d.date.slice(5));
+  const kcals = days.map(d => d.data?.total_kcal || 0);
+  new Chart(document.getElementById("kcalChart"), {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [{
+        label: "kcal",
+        data: kcals,
+        backgroundColor: kcals.map(k => k > 1400 ? "#f48fb1" : "#f8bbd0"),
+        borderRadius: 8,
+      }, {
+        label: "goal (1400)",
+        data: Array(7).fill(1400),
+        type: "line",
+        borderColor: "#c2185b",
+        borderDash: [5, 5],
+        pointRadius: 0,
+        fill: false,
+      }]
+    },
+    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+  });
+
+  // Meals table
+  const tbody = document.getElementById("meals-tbody");
+  [...days].reverse().forEach(({ date, data }) => {
+    if (!data) return;
+    const meals = [data.breakfast, data.lunch, data.dinner].filter(Boolean).join(", ") || "—";
+    const ct = data.cross_trainer
+      ? `<span class="badge green">✅ ${data.cross_trainer_minutes}min</span>`
+      : `<span class="badge red">❌</span>`;
+    tbody.innerHTML += `<tr><td>${date.slice(5)}</td><td>${meals}</td><td>${data.total_kcal||0}</td><td>${ct}</td></tr>`;
+  });
+}
+
+init();
+</script>
+</body>
+</html>
