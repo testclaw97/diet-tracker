@@ -238,19 +238,24 @@ async def cmd_log(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ── Main ──────────────────────────────────────────────────────────
 
+scheduler = AsyncIOScheduler(timezone=BERLIN)
+
+
+async def post_init(app):
+    scheduler.start()
+    log.info("Diet bot started")
+
+
 def main():
-    app = Application.builder().token(TELEGRAM_TOKEN).build()
+    app = Application.builder().token(TELEGRAM_TOKEN).post_init(post_init).build()
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(CommandHandler("log", cmd_log))
 
-    scheduler = AsyncIOScheduler(timezone=BERLIN)
     scheduler.add_job(morning_checkin, "cron", hour=9, minute=0, args=[app])
     scheduler.add_job(afternoon_checkin, "cron", hour=16, minute=0, args=[app])
     scheduler.add_job(evening_checkin, "cron", hour=22, minute=0, args=[app])
     scheduler.add_job(monday_weighin, "cron", day_of_week="mon", hour=8, minute=0, args=[app])
-    scheduler.start()
 
-    log.info("Diet bot started")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
