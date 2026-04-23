@@ -113,13 +113,20 @@ async def morning_checkin(app):
     cross_trainer_done_today = False
     mem = memory.build_memory_block()
     today_name = datetime.now(BERLIN).strftime("%A")
+    from datetime import timedelta
+    yesterday_str = (datetime.now(BERLIN) - timedelta(days=1)).strftime("%Y-%m-%d")
+    yesterday = memory.load_day(yesterday_str)
+    yesterday_ct = yesterday.get("cross_trainer", False)
+    yesterday_kcal = yesterday.get("total_kcal", 0)
     prompt = (
         f"{SYSTEM_PROMPT}\n{mem}\n"
+        f"[Yesterday confirmed data: total_kcal={yesterday_kcal}, cross_trainer={'✅ done' if yesterday_ct else '❌ NOT done'}]\n"
         f"It is 9am on {today_name} in Berlin. Write a warm morning check-in for Neha.\n"
         f"Include: 1) One specific, actionable diet tip based on her recent logs "
         f"(if no logs yet, give a good low-carb breakfast idea). "
         f"2) Ask what she plans to eat today. "
         f"3) Ask if she plans to do cross trainer today. "
+        f"CRITICAL: Only mention cross trainer achievement if yesterday cross_trainer=done. Never assume or congratulate for things not in the confirmed data.\n"
         f"Keep it friendly, short, conversational — no bullet points, max 4 sentences."
     )
     response = await run_claude(prompt)
@@ -148,19 +155,30 @@ async def afternoon_checkin(app):
 async def evening_checkin(app):
     today = memory.load_day(memory.today_str())
     mem = memory.build_memory_block()
-    ct_done = today.get("cross_trainer", False) or cross_trainer_done_today
+    ct_done = today.get("cross_trainer", False)  # only trust saved JSON, not in-memory flag
+
+    history_block = ""
+    if session_history:
+        lines = []
+        for u, b in session_history[-4:]:
+            lines.append(f"Neha: {u}")
+            lines.append(f"You: {b}")
+        history_block = "Recent conversation today:\n" + "\n".join(lines) + "\n\n"
+
     prompt = (
         f"{SYSTEM_PROMPT}\n{mem}\n"
-        f"[Today: breakfast: {today.get('breakfast') or 'not logged'}, "
+        f"[Today confirmed data: breakfast: {today.get('breakfast') or 'not logged'}, "
         f"lunch: {today.get('lunch') or 'not logged'}, "
         f"dinner: {today.get('dinner') or 'not logged'}, "
-        f"total kcal so far: {today.get('total_kcal', 0)}, "
-        f"cross trainer: {'done' if ct_done else 'not recorded yet'}]\n"
+        f"total kcal saved: {today.get('total_kcal', 0)}, "
+        f"cross trainer: {'✅ done' if ct_done else '❌ not recorded yet'}]\n\n"
+        f"{history_block}"
         f"It is 10pm. Write a warm evening check-in. "
-        f"Ask about dinner if not logged. "
+        f"Use the recent conversation above to get the most accurate picture of what she ate today — the saved kcal total may be incomplete. "
+        f"Ask about dinner if not mentioned. "
         + ("" if ct_done else "Ask if she did cross trainer today. ")
-        + "If she has logged meals, give a brief summary of today — was it a good day? "
-        f"End with one encouraging sentence for tomorrow. Max 4 sentences."
+        + "Give a brief honest summary of today. "
+        f"CRITICAL: Only say she did cross trainer if cross_trainer=done. Never assume. End with one encouraging sentence for tomorrow. Max 4 sentences."
     )
     response = await run_claude(prompt)
     await app.bot.send_message(chat_id=GROUP_CHAT_ID, text=response)
@@ -231,9 +249,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     log.info(f"Message from Neha: {text[:80]}")
     text_lower = text.lower()
 
-    # Cross trainer auto-detection
+    # Cross trainer auto-detection — only past-tense confirmations, not plans
     if any(w in text_lower for w in ["cross trainer", "crosstrainer", "training", "sport", "workout"]):
-        if any(w in text_lower for w in ["yes", "ja", "done", "did", "finished", "gemacht", "made"]):
+        is_future = any(w in text_lower for w in ["will", "gonna", "going to", "plan", "later", "tonight", "evening", "morgen", "want to", "i'll"])
+        if not is_future and any(w in text_lower for w in ["yes", "ja", "done", "did", "finished", "gemacht", "made"]):
             mins_match = re.search(r"(\d+)\s*(?:min|minute)", text_lower)
             minutes = int(mins_match.group(1)) if mins_match else 30
             memory.update_today(cross_trainer=True, cross_trainer_minutes=minutes)
