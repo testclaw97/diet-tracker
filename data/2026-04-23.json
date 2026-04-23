@@ -1,0 +1,16 @@
+{
+  "date": "2026-04-23",
+  "breakfast": "200g kwark, 100g blueberries, coffee",
+  "breakfast_kcal": 200,
+  "lunch": "3 eggs, veggies",
+  "lunch_kcal": 320,
+  "dinner": "3 eggs, veggies",
+  "dinner_kcal": 320,
+  "snacks": "Red Bull Sugar Free",
+  "snacks_kcal": 10,
+  "total_kcal": 850,
+  "cross_trainer": true,
+  "cross_trainer_minutes": 30,
+  "weight_kg": null,
+  "notes": ""
+}
