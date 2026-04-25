@@ -1,0 +1,16 @@
+{
+  "date": "2026-04-25",
+  "breakfast": "semi-skimmed milk with cereals",
+  "breakfast_kcal": 220,
+  "lunch": "spaghetti with pork",
+  "lunch_kcal": 675,
+  "dinner": null,
+  "dinner_kcal": 0,
+  "snacks": null,
+  "snacks_kcal": 0,
+  "total_kcal": 895,
+  "cross_trainer": false,
+  "cross_trainer_minutes": 0,
+  "weight_kg": null,
+  "notes": ""
+}
