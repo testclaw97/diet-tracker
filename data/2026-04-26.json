@@ -1,0 +1,16 @@
+{
+  "date": "2026-04-26",
+  "breakfast": null,
+  "breakfast_kcal": 0,
+  "lunch": null,
+  "lunch_kcal": 0,
+  "dinner": "2 sausages, 2 pieces of chicken with jamaican mix, lots of veggies, 2 chicken patties (BBQ)",
+  "dinner_kcal": 1050,
+  "snacks": null,
+  "snacks_kcal": 0,
+  "total_kcal": 1050,
+  "cross_trainer": false,
+  "cross_trainer_minutes": 0,
+  "weight_kg": null,
+  "notes": ""
+}
