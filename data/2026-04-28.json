@@ -1,0 +1,16 @@
+{
+  "date": "2026-04-28",
+  "breakfast": "salad with tomato and cucumber",
+  "breakfast_kcal": 35,
+  "lunch": "sandwich with chicken and salad leaves",
+  "lunch_kcal": 250,
+  "dinner": "salad with chicken pieces",
+  "dinner_kcal": 220,
+  "snacks": "handful of chips, Pepsi Zero",
+  "snacks_kcal": 150,
+  "total_kcal": 655,
+  "cross_trainer": false,
+  "cross_trainer_minutes": 0,
+  "weight_kg": null,
+  "notes": ""
+}
