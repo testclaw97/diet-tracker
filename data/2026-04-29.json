@@ -1,0 +1,16 @@
+{
+  "date": "2026-04-29",
+  "breakfast": null,
+  "breakfast_kcal": 0,
+  "lunch": null,
+  "lunch_kcal": 0,
+  "dinner": null,
+  "dinner_kcal": 0,
+  "snacks": "one slice of Albert Heijn cookies and cream cake",
+  "snacks_kcal": 350,
+  "total_kcal": 350,
+  "cross_trainer": false,
+  "cross_trainer_minutes": 0,
+  "weight_kg": null,
+  "notes": ""
+}
