@@ -1,0 +1,16 @@
+{
+  "date": "2026-04-30",
+  "breakfast": "2 slices volkoren bread with salad, tomato, 1 slice cheese, pepper sauce",
+  "breakfast_kcal": 310,
+  "lunch": null,
+  "lunch_kcal": 0,
+  "dinner": null,
+  "dinner_kcal": 0,
+  "snacks": "half pint Ben & Jerry's Chewy Gooey Cookie (Churrios) ice cream",
+  "snacks_kcal": 500,
+  "total_kcal": 810,
+  "cross_trainer": true,
+  "cross_trainer_minutes": 30,
+  "weight_kg": null,
+  "notes": ""
+}
