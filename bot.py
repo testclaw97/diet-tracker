@@ -3,7 +3,8 @@ import asyncio
 import logging
 import os
 import re
-from datetime import datetime
+import tempfile
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 from telegram import Update
@@ -11,6 +12,7 @@ from telegram.ext import Application, MessageHandler, CommandHandler, filters, C
 from telegram.constants import ChatAction
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import memory
+import notes
 import push_data
 
 load_dotenv()
@@ -21,6 +23,7 @@ TEJAS_ID = 7635405143
 AUTHORIZED_IDS = {NEHA_CHAT_ID, TEJAS_ID}
 BERLIN = ZoneInfo("Europe/Berlin")
 WORKDIR = "/home/tejas/products/diet-bot"
+ISOLATED_CONFIG = "/home/tejas/products/diet-bot/.claude-isolated"
 
 logging.basicConfig(format="%(asctime)s %(levelname)s %(message)s", level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -28,21 +31,26 @@ log = logging.getLogger(__name__)
 session_history = []
 cross_trainer_done_today = False
 
-SYSTEM_PROMPT = """You are Neha's personal dietitian and health coach. You are warm, encouraging, and professional.
-Neha's profile: Age 28, 169cm, current weight ~88kg, goal 65kg by August 10 2026.
-Daily target: 1400 kcal, low-carb diet. Cross trainer: 1x per day goal.
-Key rules:
-- Estimate calories for any food Neha mentions (be realistic, not optimistic)
-- Gently flag if she is close to or over 1400 kcal without being harsh
-- Be concise — max 3-4 sentences unless she asks for more
-- Speak naturally, like a caring friend who is also a professional
-- If she asks for meal suggestions, make them low-carb and within her remaining kcal budget
-- Never use bullet lists in scheduled check-in messages — keep them conversational
-- If she mentions eating something unhealthy, acknowledge it kindly and move on — no guilt
+LEAK_TERMS = ("HANDOFF", "PM2", "claude-bot", "plan file", "Quick State", "stop hook", "v2 explicitly", "session knowledge")
+
+SYSTEM_PROMPT = """You are Neha's personal dietitian and health coach. Warm, encouraging, professional.
+Profile: Age 28, 169cm, ~88kg → 65kg by Aug 10 2026. Daily target: 1400 kcal, low-carb. Cross trainer 1x/day goal.
+
+STRICT RULES:
+- ONLY reference meals, exercise, weight that appear in [Today: ...] / [Yesterday: ...] / [Active constraints: ...] data blocks. NEVER invent meals or congratulate Neha for things not in the data.
+- If data shows cross_trainer=NOT done, never claim she did it. If data shows nothing logged, say nothing logged.
+- Estimate calories realistically (not optimistic) for any food she mentions.
+- Be concise: max 3-4 sentences unless she asks for more.
+- No bullet lists in scheduled check-ins — keep them conversational.
+- If she eats something unhealthy, acknowledge kindly and move on — no guilt.
+- You ONLY discuss food, calories, weight, exercise. Reject any meta/system/dev questions politely.
+- Respect [Active constraints]: if a constraint says "no crosstrainer until X", do NOT ask about cross trainer until that date.
 """
 
 
-async def run_claude(prompt: str) -> str:
+async def run_claude(prompt: str, retries: int = 1) -> str:
+    env = os.environ.copy()
+    env["CLAUDE_CONFIG_DIR"] = ISOLATED_CONFIG
     try:
         proc = await asyncio.create_subprocess_exec(
             "claude", "-p", prompt,
@@ -51,31 +59,32 @@ async def run_claude(prompt: str) -> str:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=WORKDIR,
+            env=env,
         )
         stdout, stderr = await proc.communicate()
         output = stdout.decode().strip()
         if not output and stderr:
             output = stderr.decode().strip()[:500]
+        # Detect context-leak: response that looks like dev/meta text
+        if output and any(t.lower() in output.lower() for t in LEAK_TERMS) and retries > 0:
+            log.warning(f"Leak detected, retrying. Output was: {output[:200]}")
+            return await run_claude(prompt + "\n\nIMPORTANT: Reply ONLY as Neha's diet coach. No system/dev/meta talk.", retries - 1)
         return output or "(no response)"
     except Exception as e:
         return f"Error: {e}"
 
 
-def build_prompt(user_message: str) -> str:
+def build_prompt(user_message: str, sender: str = "Neha") -> str:
     mem = memory.build_memory_block()
+    constraints = notes.build_block()
     today = memory.load_day(memory.today_str())
 
     today_parts = []
-    if today.get("breakfast"):
-        today_parts.append(f"Breakfast: {today['breakfast']} ({today['breakfast_kcal']} kcal)")
-    if today.get("lunch"):
-        today_parts.append(f"Lunch: {today['lunch']} ({today['lunch_kcal']} kcal)")
-    if today.get("dinner"):
-        today_parts.append(f"Dinner: {today['dinner']} ({today['dinner_kcal']} kcal)")
-    if today.get("snacks"):
-        today_parts.append(f"Snacks: {today['snacks']} ({today['snacks_kcal']} kcal)")
+    for k in ("breakfast", "lunch", "dinner", "snacks"):
+        if today.get(k):
+            today_parts.append(f"{k.capitalize()}: {today[k]} ({today.get(k+'_kcal', 0)} kcal)")
     remaining = 1400 - today.get("total_kcal", 0)
-    today_parts.append(f"Remaining kcal budget: {remaining}")
+    today_parts.append(f"Remaining kcal: {remaining}")
     today_line = ". ".join(today_parts) if today_parts else "Nothing logged yet today."
 
     history_block = ""
@@ -87,14 +96,17 @@ def build_prompt(user_message: str) -> str:
         history_block = "\n".join(lines) + "\n"
 
     weight_info = memory.get_latest_weight()
+    sender_note = "" if sender == "Neha" else f"[Note: this message is from {sender} (Neha's husband), not Neha herself. Respond appropriately.]\n"
 
     return (
         f"{SYSTEM_PROMPT}\n"
         f"{mem}"
+        f"{constraints}"
         f"[Today so far: {today_line}]\n"
         f"[Latest weight: {weight_info}]\n\n"
+        f"{sender_note}"
         f"{history_block}"
-        f"Neha: {user_message}\n"
+        f"{sender}: {user_message}\n"
         f"You:"
     )
 
@@ -112,22 +124,20 @@ async def morning_checkin(app):
     session_history = []
     cross_trainer_done_today = False
     mem = memory.build_memory_block()
+    constraints = notes.build_block()
     today_name = datetime.now(BERLIN).strftime("%A")
-    from datetime import timedelta
     yesterday_str = (datetime.now(BERLIN) - timedelta(days=1)).strftime("%Y-%m-%d")
     yesterday = memory.load_day(yesterday_str)
     yesterday_ct = yesterday.get("cross_trainer", False)
     yesterday_kcal = yesterday.get("total_kcal", 0)
     prompt = (
-        f"{SYSTEM_PROMPT}\n{mem}\n"
-        f"[Yesterday confirmed data: total_kcal={yesterday_kcal}, cross_trainer={'✅ done' if yesterday_ct else '❌ NOT done'}]\n"
-        f"It is 9am on {today_name} in Berlin. Write a warm morning check-in for Neha.\n"
-        f"Include: 1) One specific, actionable diet tip based on her recent logs "
-        f"(if no logs yet, give a good low-carb breakfast idea). "
-        f"2) Ask what she plans to eat today. "
-        f"3) Ask if she plans to do cross trainer today. "
-        f"CRITICAL: Only mention cross trainer achievement if yesterday cross_trainer=done. Never assume or congratulate for things not in the confirmed data.\n"
-        f"Keep it friendly, short, conversational — no bullet points, max 4 sentences."
+        f"{SYSTEM_PROMPT}\n{mem}{constraints}"
+        f"[Yesterday confirmed: total_kcal={yesterday_kcal}, cross_trainer={'done' if yesterday_ct else 'NOT done'}]\n"
+        f"It is 9am on {today_name} in Berlin. Write a warm morning check-in.\n"
+        f"1) One actionable diet tip from her recent logs (or low-carb breakfast idea if no logs). "
+        f"2) Ask what she plans to eat. "
+        f"3) Ask if she plans cross trainer today — UNLESS active constraints say otherwise. "
+        f"NEVER claim she did anything not in confirmed data. Max 4 sentences, conversational."
     )
     response = await run_claude(prompt)
     await app.bot.send_message(chat_id=GROUP_CHAT_ID, text=response)
@@ -138,13 +148,13 @@ async def morning_checkin(app):
 async def afternoon_checkin(app):
     today = memory.load_day(memory.today_str())
     mem = memory.build_memory_block()
+    constraints = notes.build_block()
     prompt = (
-        f"{SYSTEM_PROMPT}\n{mem}\n"
-        f"[Today so far: breakfast logged: {'yes — ' + str(today.get('breakfast','')) if today.get('breakfast') else 'no'}, "
-        f"lunch logged: {'yes — ' + str(today.get('lunch','')) if today.get('lunch') else 'no'}]\n"
-        f"It is 4pm. Write a brief friendly afternoon check-in. "
-        f"If lunch isn't logged, ask about it. Ask if she had any snacks or sweets. "
-        f"Keep it to 2 sentences max — short and warm."
+        f"{SYSTEM_PROMPT}\n{mem}{constraints}"
+        f"[Today: breakfast {'logged' if today.get('breakfast') else 'NOT logged'}, "
+        f"lunch {'logged' if today.get('lunch') else 'NOT logged'}]\n"
+        f"It is 4pm. Brief friendly afternoon check-in. "
+        f"If lunch not logged, ask. Ask about snacks/sweets. Max 2 sentences."
     )
     response = await run_claude(prompt)
     await app.bot.send_message(chat_id=GROUP_CHAT_ID, text=response)
@@ -155,7 +165,8 @@ async def afternoon_checkin(app):
 async def evening_checkin(app):
     today = memory.load_day(memory.today_str())
     mem = memory.build_memory_block()
-    ct_done = today.get("cross_trainer", False)  # only trust saved JSON, not in-memory flag
+    constraints = notes.build_block()
+    ct_done = today.get("cross_trainer", False)
 
     history_block = ""
     if session_history:
@@ -166,19 +177,18 @@ async def evening_checkin(app):
         history_block = "Recent conversation today:\n" + "\n".join(lines) + "\n\n"
 
     prompt = (
-        f"{SYSTEM_PROMPT}\n{mem}\n"
-        f"[Today confirmed data: breakfast: {today.get('breakfast') or 'not logged'}, "
-        f"lunch: {today.get('lunch') or 'not logged'}, "
-        f"dinner: {today.get('dinner') or 'not logged'}, "
-        f"total kcal saved: {today.get('total_kcal', 0)}, "
-        f"cross trainer: {'✅ done' if ct_done else '❌ not recorded yet'}]\n\n"
+        f"{SYSTEM_PROMPT}\n{mem}{constraints}"
+        f"[Today saved: breakfast={today.get('breakfast') or 'none'}, "
+        f"lunch={today.get('lunch') or 'none'}, "
+        f"dinner={today.get('dinner') or 'none'}, "
+        f"total_kcal={today.get('total_kcal', 0)}, "
+        f"cross_trainer={'done' if ct_done else 'NOT done'}]\n\n"
         f"{history_block}"
-        f"It is 10pm. Write a warm evening check-in. "
-        f"Use the recent conversation above to get the most accurate picture of what she ate today — the saved kcal total may be incomplete. "
+        f"It is 10pm. Warm evening check-in. "
+        f"Use the recent conversation to get accurate kcal — saved total may lag. "
         f"Ask about dinner if not mentioned. "
-        + ("" if ct_done else "Ask if she did cross trainer today. ")
-        + "Give a brief honest summary of today. "
-        f"CRITICAL: Only say she did cross trainer if cross_trainer=done. Never assume. End with one encouraging sentence for tomorrow. Max 4 sentences."
+        + ("" if ct_done else "Ask if she did cross trainer today (unless constraints forbid). ")
+        + "Brief honest summary, encouraging close. NEVER claim cross trainer done unless confirmed. Max 4 sentences."
     )
     response = await run_claude(prompt)
     await app.bot.send_message(chat_id=GROUP_CHAT_ID, text=response)
@@ -192,51 +202,72 @@ async def evening_checkin(app):
 async def monday_weighin(app):
     weight_info = memory.get_latest_weight()
     prompt = (
-        f"{SYSTEM_PROMPT}\n"
-        f"[Latest weight: {weight_info}]\n"
+        f"{SYSTEM_PROMPT}\n[Latest weight: {weight_info}]\n"
         f"It is Monday morning. Ask Neha gently for her weekly weigh-in. "
-        f"Remind her the number is just information, not a judgment. "
-        f"One or two sentences only."
+        f"Number is just data, not judgment. 1-2 sentences."
     )
     response = await run_claude(prompt)
     await app.bot.send_message(chat_id=GROUP_CHAT_ID, text=response)
     log.info("Monday weigh-in request sent")
 
 
-# ── Meal extraction ───────────────────────────────────────────────
+# ── Meal + notes extraction ───────────────────────────────────────
 
-async def extract_and_save_meals(user_text: str, bot_response: str):
+async def extract_and_save(user_text: str, bot_response: str):
+    today_str = memory.today_str()
+    yesterday_str = (datetime.now(BERLIN) - timedelta(days=1)).strftime("%Y-%m-%d")
     prompt = (
-        f"Extract meal data from this conversation. Output ONLY valid JSON or the word null.\n\n"
-        f"User said: {user_text}\n"
-        f"Dietitian estimated: {bot_response}\n\n"
-        f"If food was mentioned, output JSON like:\n"
-        f'[{{"meal":"breakfast","description":"oats with banana","kcal":380}}]\n'
-        f"meal must be one of: breakfast, lunch, dinner, snacks\n"
-        f"Multiple meals in one message = multiple objects in the array.\n"
-        f"If no food was mentioned, output: null"
+        f"Extract structured data from this conversation. Output ONLY valid JSON or null.\n\n"
+        f"User: {user_text}\n"
+        f"Coach: {bot_response}\n\n"
+        f'Format: {{"meals":[{{"meal":"breakfast|lunch|dinner|snacks","description":"...","kcal":N,"date":"today|yesterday"}}], '
+        f'"constraint":"text or null","preference":"text or null"}}\n'
+        f'Rules: meal date based on user wording ("yesterday I had..." = yesterday, else today). '
+        f'constraint = temporary limit Neha mentioned (e.g. "no crosstrainer until Tuesday"). '
+        f'preference = lasting fact (e.g. "vegetarian", "lactose intolerant"). '
+        f"Most messages have no constraint/preference — null is correct.\n"
+        f"If nothing relevant, output: null"
     )
-    raw = await run_claude(prompt)
+    raw = await run_claude(prompt, retries=0)
     try:
         raw = raw.strip()
-        if raw.lower() == "null" or not raw.startswith("["):
+        if raw.lower() == "null" or not raw.startswith("{"):
             return
         import json as _json
-        meals = _json.loads(raw)
-        for m in meals:
+        data = _json.loads(raw)
+        for m in data.get("meals") or []:
             meal_key = m.get("meal")
             if meal_key not in ("breakfast", "lunch", "dinner", "snacks"):
                 continue
-            memory.update_today(**{
+            target = yesterday_str if m.get("date") == "yesterday" else today_str
+            memory.update_day(target, **{
                 meal_key: m.get("description", ""),
                 f"{meal_key}_kcal": int(m.get("kcal", 0))
             })
-            log.info(f"Saved {meal_key}: {m.get('description')} ({m.get('kcal')} kcal)")
+            log.info(f"Saved {target} {meal_key}: {m.get('description')} ({m.get('kcal')} kcal)")
+        if data.get("constraint"):
+            text = data["constraint"]
+            expires = None
+            # crude expiry parse: "until Tuesday" → next Tuesday
+            m = re.search(r"until\s+(\w+)", text.lower())
+            if m:
+                day = m.group(1)
+                weekdays = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+                if day in weekdays:
+                    today_d = datetime.now(BERLIN)
+                    target_idx = weekdays.index(day)
+                    delta = (target_idx - today_d.weekday()) % 7 or 7
+                    expires = (today_d + timedelta(days=delta)).strftime("%Y-%m-%d")
+            notes.add_constraint(text, expires)
+            log.info(f"Added constraint: {text} (expires {expires})")
+        if data.get("preference"):
+            notes.add_preference(data["preference"])
+            log.info(f"Added preference: {data['preference']}")
     except Exception as e:
-        log.warning(f"Meal extraction failed: {e} — raw: {raw[:100]}")
+        log.warning(f"Extraction failed: {e} — raw: {raw[:200]}")
 
 
-# ── Message handler ───────────────────────────────────────────────
+# ── Message handlers ──────────────────────────────────────────────
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global cross_trainer_done_today
@@ -246,10 +277,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not text:
         return
 
-    log.info(f"Message from Neha: {text[:80]}")
+    sender = "Tejas" if update.effective_user.id == TEJAS_ID else "Neha"
+    log.info(f"Message from {sender}: {text[:80]}")
     text_lower = text.lower()
 
-    # Cross trainer auto-detection — only past-tense confirmations, not plans
+    # Cross trainer auto-detection — past tense only
     if any(w in text_lower for w in ["cross trainer", "crosstrainer", "training", "sport", "workout"]):
         is_future = any(w in text_lower for w in ["will", "gonna", "going to", "plan", "later", "tonight", "evening", "morgen", "want to", "i'll"])
         if not is_future and any(w in text_lower for w in ["yes", "ja", "done", "did", "finished", "gemacht", "made"]):
@@ -258,25 +290,67 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             memory.update_today(cross_trainer=True, cross_trainer_minutes=minutes)
             cross_trainer_done_today = True
 
-    # Weight auto-detection (e.g. "I'm 86kg" or "86.5 kg")
+    # Weight auto-detection
     weight_match = re.search(r"\b(\d{2,3}(?:[.,]\d)?)\s*kg\b", text_lower)
     if weight_match and not any(w in text_lower for w in ["goal", "target", "ziel", "wanna", "want"]):
         memory.update_today(weight_kg=float(weight_match.group(1).replace(",", ".")))
 
     typing_task = asyncio.create_task(keep_typing(context.bot, update.effective_chat.id))
     try:
-        prompt = build_prompt(text)
+        prompt = build_prompt(text, sender=sender)
         response = await run_claude(prompt)
     finally:
         typing_task.cancel()
 
     await update.message.reply_text(response)
-    session_history.append((text, response))
-    if len(session_history) > 5:
-        session_history.pop(0)
+    if sender == "Neha":  # only track Neha's exchanges in session history
+        session_history.append((text, response))
+        if len(session_history) > 5:
+            session_history.pop(0)
+        asyncio.create_task(extract_and_save(text, response))
 
-    # Extract and save meal data in background
-    asyncio.create_task(extract_and_save_meals(text, response))
+
+async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in AUTHORIZED_IDS:
+        return
+    sender = "Tejas" if update.effective_user.id == TEJAS_ID else "Neha"
+    log.info(f"Photo from {sender}")
+
+    photo = update.message.photo[-1]  # largest size
+    caption = update.message.caption or ""
+    file = await context.bot.get_file(photo.file_id)
+    tmp = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
+    tmp.close()
+    await file.download_to_drive(tmp.name)
+
+    typing_task = asyncio.create_task(keep_typing(context.bot, update.effective_chat.id))
+    try:
+        mem = memory.build_memory_block()
+        constraints = notes.build_block()
+        today = memory.load_day(memory.today_str())
+        remaining = 1400 - today.get("total_kcal", 0)
+        prompt = (
+            f"{SYSTEM_PROMPT}\n{mem}{constraints}"
+            f"[Remaining kcal today: {remaining}]\n\n"
+            f"{sender} sent a photo of food. Caption: '{caption}'.\n"
+            f"Read the image at {tmp.name}, describe what you see (the food, portion size), "
+            f"estimate calories realistically, and reply warmly to Neha as her coach. "
+            f"Max 4 sentences."
+        )
+        response = await run_claude(prompt)
+    finally:
+        typing_task.cancel()
+        try:
+            os.unlink(tmp.name)
+        except Exception:
+            pass
+
+    await update.message.reply_text(response)
+    if sender == "Neha":
+        session_history.append((f"(photo) {caption}", response))
+        if len(session_history) > 5:
+            session_history.pop(0)
+        asyncio.create_task(extract_and_save(f"(photo) {caption} — coach saw: {response}", response))
 
 
 async def cmd_log(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -294,6 +368,13 @@ async def cmd_log(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(msg)
 
 
+async def cmd_notes(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in AUTHORIZED_IDS:
+        return
+    block = notes.build_block().strip() or "(no active notes)"
+    await update.message.reply_text(block)
+
+
 # ── Main ──────────────────────────────────────────────────────────
 
 scheduler = AsyncIOScheduler(timezone=BERLIN)
@@ -306,8 +387,10 @@ async def post_init(app):
 
 def main():
     app = Application.builder().token(TELEGRAM_TOKEN).post_init(post_init).build()
+    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(CommandHandler("log", cmd_log))
+    app.add_handler(CommandHandler("notes", cmd_notes))
 
     scheduler.add_job(morning_checkin, "cron", hour=9, minute=0, args=[app])
     scheduler.add_job(afternoon_checkin, "cron", hour=16, minute=0, args=[app])

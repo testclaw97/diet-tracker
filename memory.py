@@ -43,7 +43,11 @@ def save_day(data: dict):
     data_path(data["date"]).write_text(json.dumps(data, indent=2, ensure_ascii=False))
 
 def update_today(**kwargs):
-    d = load_day(today_str())
+    return update_day(today_str(), **kwargs)
+
+def update_day(date_str, **kwargs):
+    d = load_day(date_str)
+    d["date"] = date_str
     d.update(kwargs)
     save_day(d)
     return d

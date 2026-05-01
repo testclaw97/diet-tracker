@@ -1,0 +1,6 @@
+{
+  "hooks": {},
+  "permissions": {
+    "allow": ["Read"]
+  }
+}
