@@ -1,0 +1,16 @@
+{
+  "date": "2026-05-02",
+  "breakfast": null,
+  "breakfast_kcal": 0,
+  "lunch": "veggies and chicken",
+  "lunch_kcal": 350,
+  "dinner": "veggies and chicken",
+  "dinner_kcal": 350,
+  "snacks": "bite of pizza slice",
+  "snacks_kcal": 50,
+  "total_kcal": 750,
+  "cross_trainer": false,
+  "cross_trainer_minutes": 0,
+  "weight_kg": null,
+  "notes": ""
+}
