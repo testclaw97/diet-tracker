@@ -1,0 +1,16 @@
+{
+  "date": "2026-05-07",
+  "breakfast": null,
+  "breakfast_kcal": 0,
+  "lunch": "Anda bhurji with mushroom, coffee with milk and 2 sweetener tabs",
+  "lunch_kcal": 375,
+  "dinner": "Salad with 200g chicken, Philadelphia light cream cheese dressing, 10% fat, pepper sauce, water",
+  "dinner_kcal": 475,
+  "snacks": null,
+  "snacks_kcal": 0,
+  "total_kcal": 850,
+  "cross_trainer": false,
+  "cross_trainer_minutes": 0,
+  "weight_kg": null,
+  "notes": ""
+}
