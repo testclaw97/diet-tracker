@@ -1,0 +1,16 @@
+{
+  "date": "2026-05-09",
+  "breakfast": null,
+  "breakfast_kcal": 0,
+  "lunch": null,
+  "lunch_kcal": 0,
+  "dinner": null,
+  "dinner_kcal": 0,
+  "snacks": "1 pizza slice, 2 mango lassi glasses, coffee with bit of milk",
+  "snacks_kcal": 850,
+  "total_kcal": 850,
+  "cross_trainer": false,
+  "cross_trainer_minutes": 0,
+  "weight_kg": null,
+  "notes": ""
+}
