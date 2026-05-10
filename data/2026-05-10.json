@@ -1,0 +1,16 @@
+{
+  "date": "2026-05-10",
+  "breakfast": "Mushroom egg bhurji (3 eggs) with 1 slice 30+ cheese",
+  "breakfast_kcal": 390,
+  "lunch": "Large salad with cherry tomatoes, cucumber, 250g chicken",
+  "lunch_kcal": 530,
+  "dinner": null,
+  "dinner_kcal": 0,
+  "snacks": "Leftover Chinese egg noodles (half portion)",
+  "snacks_kcal": 400,
+  "total_kcal": 1320,
+  "cross_trainer": false,
+  "cross_trainer_minutes": 0,
+  "weight_kg": null,
+  "notes": ""
+}
