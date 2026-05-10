@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 import asyncio
+import json
 import logging
+import mimetypes
 import os
 import re
 import tempfile
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
@@ -24,17 +28,117 @@ AUTHORIZED_IDS = {NEHA_CHAT_ID, TEJAS_ID}
 BERLIN = ZoneInfo("Europe/Berlin")
 WORKDIR = "/home/tejas/products/diet-bot"
 ISOLATED_CONFIG = "/home/tejas/products/diet-bot/.claude-isolated"
+SETTINGS_FILE = memory.DATA_DIR / "settings.json"
+DEFAULT_SETTINGS = {
+    "midday_hour": 13, "midday_minute": 0,
+    "night_hour": 21, "night_minute": 0,
+    "eating_window_start": "12:00",
+    "eating_window_end": "20:00",
+}
+
+
+def load_settings() -> dict:
+    if SETTINGS_FILE.exists():
+        try:
+            return {**DEFAULT_SETTINGS, **json.loads(SETTINGS_FILE.read_text())}
+        except Exception:
+            pass
+    return DEFAULT_SETTINGS.copy()
+
+
+def save_settings(s: dict):
+    memory.DATA_DIR.mkdir(exist_ok=True)
+    SETTINGS_FILE.write_text(json.dumps(s, indent=2))
+
+
+def apply_schedule(app):
+    s = load_settings()
+    for jid in ("reset_session", "midday_checkin", "night_checkin"):
+        try:
+            scheduler.remove_job(jid)
+        except Exception:
+            pass
+    ew_hour = int(s["eating_window_start"].split(":")[0])
+    scheduler.add_job(reset_session, "cron", id="reset_session", hour=ew_hour, minute=0, args=[app])
+    scheduler.add_job(midday_checkin, "cron", id="midday_checkin",
+                      hour=s["midday_hour"], minute=s["midday_minute"], args=[app])
+    scheduler.add_job(night_checkin, "cron", id="night_checkin",
+                      hour=s["night_hour"], minute=s["night_minute"], args=[app])
+    log.info(f"Schedule applied: midday={s['midday_hour']}:{s['midday_minute']:02d}, "
+             f"night={s['night_hour']}:{s['night_minute']:02d}")
 
 logging.basicConfig(format="%(asctime)s %(levelname)s %(message)s", level=logging.INFO)
 log = logging.getLogger(__name__)
 
 session_history = []
 cross_trainer_done_today = False
+_bot_app = None
+_main_loop = None
+
+
+# ── Web server (serves dashboard + settings API on port 8100) ─────
+
+class _WebHandler(BaseHTTPRequestHandler):
+    def log_message(self, *args): pass
+
+    def _json(self, code, data):
+        body = json.dumps(data).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", len(body))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _file(self, path):
+        if not path.exists():
+            self.send_response(404); self.end_headers(); return
+        data = path.read_bytes()
+        mime = mimetypes.guess_type(str(path))[0] or "application/octet-stream"
+        self.send_response(200)
+        self.send_header("Content-Type", mime)
+        self.send_header("Content-Length", len(data))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def do_GET(self):
+        p = self.path.split("?")[0]
+        if p in ("/", ""):
+            self._file(Path(WORKDIR) / "index.html")
+        elif p == "/api/settings":
+            self._json(200, load_settings())
+        elif p.startswith("/data/"):
+            self._file(memory.DATA_DIR / p[6:])
+        else:
+            self.send_response(404); self.end_headers()
+
+    def do_POST(self):
+        if self.path == "/api/settings":
+            length = int(self.headers.get("Content-Length", 0))
+            try:
+                new_s = json.loads(self.rfile.read(length))
+                s = load_settings()
+                s.update(new_s)
+                save_settings(s)
+                if _bot_app and _main_loop:
+                    asyncio.run_coroutine_threadsafe(_apply_schedule_async(s), _main_loop)
+                self._json(200, {"ok": True})
+            except Exception as e:
+                self._json(400, {"error": str(e)})
+        else:
+            self.send_response(404); self.end_headers()
+
+
+async def _apply_schedule_async(s):
+    if _bot_app:
+        apply_schedule(_bot_app)
+        log.info(f"Schedule updated via web: midday={s['midday_hour']}:{s['midday_minute']:02d}, "
+                 f"night={s['night_hour']}:{s['night_minute']:02d}")
 
 LEAK_TERMS = ("HANDOFF", "PM2", "claude-bot", "plan file", "Quick State", "stop hook", "v2 explicitly", "session knowledge")
 
 SYSTEM_PROMPT = """You are Neha's personal dietitian and health coach. Warm, encouraging, professional.
 Profile: Age 28, 169cm, ~88kg → 65kg by Aug 10 2026. Daily target: 1400 kcal, low-carb. Cross trainer 1x/day goal.
+Diet protocol: Intermittent fasting — eating window is 12:00–20:00. No food outside this window.
 
 STRICT RULES:
 - ONLY reference meals, exercise, weight that appear in [Today: ...] / [Yesterday: ...] / [Active constraints: ...] data blocks. NEVER invent meals or congratulate Neha for things not in the data.
@@ -119,50 +223,30 @@ async def keep_typing(bot, chat_id):
 
 # ── Scheduled jobs ────────────────────────────────────────────────
 
-async def morning_checkin(app):
+async def reset_session(app):
     global session_history, cross_trainer_done_today
     session_history = []
     cross_trainer_done_today = False
+    log.info("Session reset at noon")
+
+
+async def midday_checkin(app):
     mem = memory.build_memory_block()
     constraints = notes.build_block()
     today_name = datetime.now(BERLIN).strftime("%A")
-    yesterday_str = (datetime.now(BERLIN) - timedelta(days=1)).strftime("%Y-%m-%d")
-    yesterday = memory.load_day(yesterday_str)
-    yesterday_ct = yesterday.get("cross_trainer", False)
-    yesterday_kcal = yesterday.get("total_kcal", 0)
     prompt = (
         f"{SYSTEM_PROMPT}\n{mem}{constraints}"
-        f"[Yesterday confirmed: total_kcal={yesterday_kcal}, cross_trainer={'done' if yesterday_ct else 'NOT done'}]\n"
-        f"It is 9am on {today_name} in Berlin. Write a warm morning check-in.\n"
-        f"1) One actionable diet tip from her recent logs (or low-carb breakfast idea if no logs). "
-        f"2) Ask what she plans to eat. "
-        f"3) Ask if she plans cross trainer today — UNLESS active constraints say otherwise. "
-        f"NEVER claim she did anything not in confirmed data. Max 4 sentences, conversational."
+        f"It is 1pm on {today_name}. Neha's eating window just opened (12:00–20:00). "
+        f"Ask her warmly what her first meal of the day is. "
+        f"Keep it short and friendly — 1-2 sentences max."
     )
     response = await run_claude(prompt)
     await app.bot.send_message(chat_id=GROUP_CHAT_ID, text=response)
-    session_history.append(("(morning check-in)", response))
-    log.info("Morning check-in sent")
+    session_history.append(("(midday check-in)", response))
+    log.info("Midday check-in sent")
 
 
-async def afternoon_checkin(app):
-    today = memory.load_day(memory.today_str())
-    mem = memory.build_memory_block()
-    constraints = notes.build_block()
-    prompt = (
-        f"{SYSTEM_PROMPT}\n{mem}{constraints}"
-        f"[Today: breakfast {'logged' if today.get('breakfast') else 'NOT logged'}, "
-        f"lunch {'logged' if today.get('lunch') else 'NOT logged'}]\n"
-        f"It is 4pm. Brief friendly afternoon check-in. "
-        f"If lunch not logged, ask. Ask about snacks/sweets. Max 2 sentences."
-    )
-    response = await run_claude(prompt)
-    await app.bot.send_message(chat_id=GROUP_CHAT_ID, text=response)
-    session_history.append(("(afternoon check-in)", response))
-    log.info("Afternoon check-in sent")
-
-
-async def evening_checkin(app):
+async def night_checkin(app):
     today = memory.load_day(memory.today_str())
     mem = memory.build_memory_block()
     constraints = notes.build_block()
@@ -181,22 +265,22 @@ async def evening_checkin(app):
         f"[Today saved: breakfast={today.get('breakfast') or 'none'}, "
         f"lunch={today.get('lunch') or 'none'}, "
         f"dinner={today.get('dinner') or 'none'}, "
+        f"snacks={today.get('snacks') or 'none'}, "
         f"total_kcal={today.get('total_kcal', 0)}, "
         f"cross_trainer={'done' if ct_done else 'NOT done'}]\n\n"
         f"{history_block}"
-        f"It is 10pm. Warm evening check-in. "
-        f"Use the recent conversation to get accurate kcal — saved total may lag. "
-        f"Ask about dinner if not mentioned. "
-        + ("" if ct_done else "Ask if she did cross trainer today (unless constraints forbid). ")
-        + "Brief honest summary, encouraging close. NEVER claim cross trainer done unless confirmed. Max 4 sentences."
+        f"It is 9pm. Neha's eating window (12:00–20:00) is closing soon. "
+        f"Ask her to recap everything she ate today. "
+        + ("" if ct_done else "Also ask if she did any exercise today (unless constraints forbid). ")
+        + "Warm, brief — 2-3 sentences max. NEVER claim cross trainer done unless confirmed."
     )
     response = await run_claude(prompt)
     await app.bot.send_message(chat_id=GROUP_CHAT_ID, text=response)
-    session_history.append(("(evening check-in)", response))
+    session_history.append(("(night check-in)", response))
 
     loop = asyncio.get_event_loop()
     await loop.run_in_executor(None, push_data.push_to_github)
-    log.info("Evening check-in sent + data pushed")
+    log.info("Night check-in sent + data pushed")
 
 
 async def monday_weighin(app):
@@ -235,6 +319,7 @@ async def extract_and_save(user_text: str, bot_response: str):
             return
         import json as _json
         data = _json.loads(raw)
+        saved_something = False
         for m in data.get("meals") or []:
             meal_key = m.get("meal")
             if meal_key not in ("breakfast", "lunch", "dinner", "snacks"):
@@ -244,6 +329,7 @@ async def extract_and_save(user_text: str, bot_response: str):
                 meal_key: m.get("description", ""),
                 f"{meal_key}_kcal": int(m.get("kcal", 0))
             })
+            saved_something = True
             log.info(f"Saved {target} {meal_key}: {m.get('description')} ({m.get('kcal')} kcal)")
         if data.get("constraint"):
             text = data["constraint"]
@@ -263,6 +349,12 @@ async def extract_and_save(user_text: str, bot_response: str):
         if data.get("preference"):
             notes.add_preference(data["preference"])
             log.info(f"Added preference: {data['preference']}")
+        # Push to GitHub after any successful meal save so website stays current
+        if saved_something:
+            async def _push():
+                loop = asyncio.get_event_loop()
+                await loop.run_in_executor(None, push_data.push_to_github)
+            asyncio.create_task(_push())
     except Exception as e:
         log.warning(f"Extraction failed: {e} — raw: {raw[:200]}")
 
@@ -375,13 +467,59 @@ async def cmd_notes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(block)
 
 
+async def cmd_settimes(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in AUTHORIZED_IDS:
+        return
+    args = context.args
+    if len(args) != 2:
+        s = load_settings()
+        await update.message.reply_text(
+            f"Current times:\n"
+            f"🕐 First meal check-in: {s['midday_hour']:02d}:{s['midday_minute']:02d}\n"
+            f"🌙 Evening recap: {s['night_hour']:02d}:{s['night_minute']:02d}\n\n"
+            f"To change: /settimes HH:MM HH:MM\n"
+            f"e.g. /settimes 13:00 21:00"
+        )
+        return
+    try:
+        def parse_t(t):
+            h, m = t.split(":")
+            h, m = int(h), int(m)
+            assert 0 <= h <= 23 and 0 <= m <= 59
+            return h, m
+        mh, mm = parse_t(args[0])
+        nh, nm = parse_t(args[1])
+    except Exception:
+        await update.message.reply_text("Invalid format. Use HH:MM e.g. /settimes 13:00 21:00")
+        return
+    s = load_settings()
+    s.update(midday_hour=mh, midday_minute=mm, night_hour=nh, night_minute=nm)
+    save_settings(s)
+    apply_schedule(context.application)
+    await update.message.reply_text(
+        f"✅ Times updated!\n"
+        f"🕐 First meal check-in: {args[0]}\n"
+        f"🌙 Evening recap: {args[1]}"
+    )
+    log.info(f"Schedule updated via /settimes: midday={args[0]}, night={args[1]}")
+
+
 # ── Main ──────────────────────────────────────────────────────────
 
 scheduler = AsyncIOScheduler(timezone=BERLIN)
 
 
 async def post_init(app):
+    global _bot_app, _main_loop
+    _bot_app = app
+    _main_loop = asyncio.get_event_loop()
+
+    apply_schedule(app)
     scheduler.start()
+
+    server = HTTPServer(("0.0.0.0", 8100), _WebHandler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    log.info("Web dashboard running on port 8100")
     log.info("Diet bot started")
 
 
@@ -391,10 +529,9 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(CommandHandler("log", cmd_log))
     app.add_handler(CommandHandler("notes", cmd_notes))
+    app.add_handler(CommandHandler("settimes", cmd_settimes))
 
-    scheduler.add_job(morning_checkin, "cron", hour=9, minute=0, args=[app])
-    scheduler.add_job(afternoon_checkin, "cron", hour=16, minute=0, args=[app])
-    scheduler.add_job(evening_checkin, "cron", hour=22, minute=0, args=[app])
+    # midday/night jobs are added by apply_schedule() in post_init (reads settings.json)
     scheduler.add_job(monday_weighin, "cron", day_of_week="mon", hour=8, minute=0, args=[app])
 
     app.run_polling(allowed_updates=Update.ALL_TYPES)

@@ -425,17 +425,10 @@ canvas { max-width: 100%; }
       <div class="settings-hint">Bot will ask for your full day recap + exercise</div>
     </div>
 
-    <hr class="settings-divider">
-
-    <div class="settings-label">Telegram command to apply</div>
-    <div class="settings-cmd-box" id="s-cmd">/settimes 13:00 21:00</div>
-    <button class="settings-copy-btn" id="s-copy-btn" onclick="copySettingsCmd()">
-      📋 Copy Command
+    <button class="settings-copy-btn" id="s-save-btn" onclick="saveSettings()">
+      💾 Save Changes
     </button>
-    <div class="settings-note">
-      Send this command in your Telegram chat with the diet coach.<br>
-      Times will take effect immediately.
-    </div>
+    <div class="settings-note" id="s-status"></div>
   </div>
 </div>
 
@@ -811,19 +804,18 @@ init();
 
 // ── SETTINGS ──
 async function openSettings() {
+  const status = document.getElementById('s-status');
+  status.textContent = '';
   try {
-    const r = await fetch(`data/settings.json?t=${Date.now()}`);
+    const r = await fetch(`/api/settings?t=${Date.now()}`);
     if (r.ok) {
       const s = await r.json();
-      const mh = String(s.midday_hour ?? 13).padStart(2,'0');
-      const mm = String(s.midday_minute ?? 0).padStart(2,'0');
-      const nh = String(s.night_hour ?? 21).padStart(2,'0');
-      const nm = String(s.night_minute ?? 0).padStart(2,'0');
-      document.getElementById('s-midday').value = `${mh}:${mm}`;
-      document.getElementById('s-night').value  = `${nh}:${nm}`;
+      document.getElementById('s-midday').value =
+        `${String(s.midday_hour ?? 13).padStart(2,'0')}:${String(s.midday_minute ?? 0).padStart(2,'0')}`;
+      document.getElementById('s-night').value =
+        `${String(s.night_hour ?? 21).padStart(2,'0')}:${String(s.night_minute ?? 0).padStart(2,'0')}`;
     }
   } catch {}
-  updateCmd();
   document.getElementById('settings-overlay').classList.add('open');
 }
 
@@ -835,30 +827,39 @@ function handleOverlayClick(e) {
   if (e.target === document.getElementById('settings-overlay')) closeSettings();
 }
 
-function updateCmd() {
+async function saveSettings() {
+  const btn = document.getElementById('s-save-btn');
+  const status = document.getElementById('s-status');
   const midday = document.getElementById('s-midday').value || '13:00';
   const night  = document.getElementById('s-night').value  || '21:00';
-  document.getElementById('s-cmd').textContent = `/settimes ${midday} ${night}`;
-}
+  const [mh, mm] = midday.split(':').map(Number);
+  const [nh, nm] = night.split(':').map(Number);
 
-document.getElementById('s-midday').addEventListener('change', updateCmd);
-document.getElementById('s-night').addEventListener('change', updateCmd);
-document.getElementById('s-midday').addEventListener('input', updateCmd);
-document.getElementById('s-night').addEventListener('input', updateCmd);
-
-async function copySettingsCmd() {
-  const cmd = document.getElementById('s-cmd').textContent;
+  btn.textContent = 'Saving…';
+  btn.disabled = true;
   try {
-    await navigator.clipboard.writeText(cmd);
+    const r = await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ midday_hour: mh, midday_minute: mm, night_hour: nh, night_minute: nm })
+    });
+    if (r.ok) {
+      btn.textContent = '✅ Saved!';
+      btn.classList.add('copied');
+      status.textContent = `Check-ins updated: first meal at ${midday}, evening at ${night} 🌸`;
+      setTimeout(() => {
+        btn.textContent = '💾 Save Changes';
+        btn.classList.remove('copied');
+        btn.disabled = false;
+      }, 2500);
+    } else {
+      throw new Error('Server error');
+    }
   } catch {
-    const ta = document.createElement('textarea');
-    ta.value = cmd; document.body.appendChild(ta);
-    ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+    btn.textContent = '💾 Save Changes';
+    btn.disabled = false;
+    status.textContent = '❌ Could not save — are you on the app link?';
   }
-  const btn = document.getElementById('s-copy-btn');
-  btn.textContent = '✅ Copied! Paste it in Telegram';
-  btn.classList.add('copied');
-  setTimeout(() => { btn.textContent = '📋 Copy Command'; btn.classList.remove('copied'); }, 3000);
 }
 </script>
 </body>
