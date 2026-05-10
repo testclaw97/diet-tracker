@@ -191,6 +191,76 @@ canvas { max-width: 100%; }
 /* spacing */
 .mt8 { margin-top: 8px; }
 .mt12 { margin-top: 12px; }
+
+/* ── SETTINGS ── */
+.settings-fab {
+  position: fixed; bottom: 24px; right: 20px; z-index: 100;
+  width: 50px; height: 50px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--deep-pink), var(--rose));
+  border: none; cursor: pointer; box-shadow: 0 4px 16px rgba(194,24,91,.35);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.3rem; transition: transform .2s;
+}
+.settings-fab:hover { transform: scale(1.08) rotate(20deg); }
+
+.settings-overlay {
+  display: none; position: fixed; inset: 0; z-index: 200;
+  background: rgba(61,43,51,.45); backdrop-filter: blur(3px);
+}
+.settings-overlay.open { display: flex; align-items: flex-end; justify-content: center; }
+@media(min-width:520px) { .settings-overlay.open { align-items: center; } }
+
+.settings-sheet {
+  background: #fff; border-radius: 24px 24px 0 0; width: 100%; max-width: 460px;
+  padding: 28px 24px 36px; box-shadow: 0 -8px 40px rgba(244,143,177,.3);
+  animation: slideUp .25s ease;
+}
+@media(min-width:520px) { .settings-sheet { border-radius: 24px; } }
+@keyframes slideUp { from { transform: translateY(60px); opacity:0; } to { transform: translateY(0); opacity:1; } }
+
+.settings-title {
+  font-size: 1.1rem; font-weight: 900; color: var(--deep-pink);
+  margin-bottom: 20px; display: flex; align-items: center; gap: 8px;
+}
+.settings-close {
+  margin-left: auto; background: #fce4ec; border: none; border-radius: 50%;
+  width: 30px; height: 30px; cursor: pointer; font-size: .9rem;
+  display: flex; align-items: center; justify-content: center; color: var(--deep-pink);
+}
+.settings-field { margin-bottom: 18px; }
+.settings-label {
+  display: block; font-size: .78rem; font-weight: 800; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .4px; margin-bottom: 6px;
+}
+.settings-input {
+  width: 100%; padding: 12px 14px; border-radius: 12px;
+  border: 1.5px solid #fce4ec; font-family: 'Nunito', sans-serif;
+  font-size: 1rem; font-weight: 700; color: var(--text);
+  background: #fff9fb; outline: none;
+}
+.settings-input:focus { border-color: var(--pink); }
+.settings-hint { font-size: .72rem; color: var(--muted); margin-top: 4px; font-weight: 600; }
+.settings-divider { border: none; border-top: 1.5px solid #fce4ec; margin: 20px 0; }
+
+.settings-cmd-box {
+  background: #fce4ec; border-radius: 12px; padding: 12px 14px;
+  font-family: monospace; font-size: .9rem; color: var(--deep-pink);
+  font-weight: 700; letter-spacing: .3px; margin-bottom: 12px;
+  word-break: break-all;
+}
+.settings-copy-btn {
+  width: 100%; padding: 13px; border-radius: 14px; border: none; cursor: pointer;
+  background: linear-gradient(135deg, var(--deep-pink), var(--rose));
+  color: #fff; font-family: 'Nunito', sans-serif; font-size: 1rem;
+  font-weight: 800; box-shadow: 0 4px 14px rgba(194,24,91,.3);
+  transition: opacity .15s;
+}
+.settings-copy-btn:active { opacity: .85; }
+.settings-copy-btn.copied { background: linear-gradient(135deg, #43a047, #2e7d32); }
+.settings-note {
+  text-align: center; font-size: .78rem; color: var(--muted);
+  font-weight: 600; margin-top: 10px; line-height: 1.5;
+}
 </style>
 </head>
 <body>
@@ -331,6 +401,43 @@ canvas { max-width: 100%; }
 
 <!-- ── 9. FOOTER ── -->
 <div class="footer">🌷 You're doing amazing, Neha! Keep going — 65 kg is waiting for you! 🌺</div>
+
+<!-- ── SETTINGS FAB ── -->
+<button class="settings-fab" onclick="openSettings()" title="Settings">⚙️</button>
+
+<!-- ── SETTINGS MODAL ── -->
+<div class="settings-overlay" id="settings-overlay" onclick="handleOverlayClick(event)">
+  <div class="settings-sheet">
+    <div class="settings-title">
+      ⚙️ Check-in Times
+      <button class="settings-close" onclick="closeSettings()">✕</button>
+    </div>
+
+    <div class="settings-field">
+      <label class="settings-label" for="s-midday">🕐 First meal check-in</label>
+      <input class="settings-input" type="time" id="s-midday" value="13:00">
+      <div class="settings-hint">Bot will ask what your first meal is at this time</div>
+    </div>
+
+    <div class="settings-field">
+      <label class="settings-label" for="s-night">🌙 Evening recap</label>
+      <input class="settings-input" type="time" id="s-night" value="21:00">
+      <div class="settings-hint">Bot will ask for your full day recap + exercise</div>
+    </div>
+
+    <hr class="settings-divider">
+
+    <div class="settings-label">Telegram command to apply</div>
+    <div class="settings-cmd-box" id="s-cmd">/settimes 13:00 21:00</div>
+    <button class="settings-copy-btn" id="s-copy-btn" onclick="copySettingsCmd()">
+      📋 Copy Command
+    </button>
+    <div class="settings-note">
+      Send this command in your Telegram chat with the diet coach.<br>
+      Times will take effect immediately.
+    </div>
+  </div>
+</div>
 
 <script>
 const GOAL_KG = 65, START_KG = 88, GOAL_DATE = new Date("2026-08-10"), KCAL_GOAL = 1400;
@@ -701,6 +808,58 @@ async function init() {
 }
 
 init();
+
+// ── SETTINGS ──
+async function openSettings() {
+  try {
+    const r = await fetch(`data/settings.json?t=${Date.now()}`);
+    if (r.ok) {
+      const s = await r.json();
+      const mh = String(s.midday_hour ?? 13).padStart(2,'0');
+      const mm = String(s.midday_minute ?? 0).padStart(2,'0');
+      const nh = String(s.night_hour ?? 21).padStart(2,'0');
+      const nm = String(s.night_minute ?? 0).padStart(2,'0');
+      document.getElementById('s-midday').value = `${mh}:${mm}`;
+      document.getElementById('s-night').value  = `${nh}:${nm}`;
+    }
+  } catch {}
+  updateCmd();
+  document.getElementById('settings-overlay').classList.add('open');
+}
+
+function closeSettings() {
+  document.getElementById('settings-overlay').classList.remove('open');
+}
+
+function handleOverlayClick(e) {
+  if (e.target === document.getElementById('settings-overlay')) closeSettings();
+}
+
+function updateCmd() {
+  const midday = document.getElementById('s-midday').value || '13:00';
+  const night  = document.getElementById('s-night').value  || '21:00';
+  document.getElementById('s-cmd').textContent = `/settimes ${midday} ${night}`;
+}
+
+document.getElementById('s-midday').addEventListener('change', updateCmd);
+document.getElementById('s-night').addEventListener('change', updateCmd);
+document.getElementById('s-midday').addEventListener('input', updateCmd);
+document.getElementById('s-night').addEventListener('input', updateCmd);
+
+async function copySettingsCmd() {
+  const cmd = document.getElementById('s-cmd').textContent;
+  try {
+    await navigator.clipboard.writeText(cmd);
+  } catch {
+    const ta = document.createElement('textarea');
+    ta.value = cmd; document.body.appendChild(ta);
+    ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+  }
+  const btn = document.getElementById('s-copy-btn');
+  btn.textContent = '✅ Copied! Paste it in Telegram';
+  btn.classList.add('copied');
+  setTimeout(() => { btn.textContent = '📋 Copy Command'; btn.classList.remove('copied'); }, 3000);
+}
 </script>
 </body>
 </html>

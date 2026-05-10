@@ -1,0 +1,8 @@
+{
+  "midday_hour": 13,
+  "midday_minute": 0,
+  "night_hour": 21,
+  "night_minute": 0,
+  "eating_window_start": "12:00",
+  "eating_window_end": "20:00"
+}
