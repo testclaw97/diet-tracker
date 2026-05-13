@@ -1,0 +1,16 @@
+{
+  "date": "2026-05-13",
+  "breakfast": null,
+  "breakfast_kcal": 0,
+  "lunch": null,
+  "lunch_kcal": 0,
+  "dinner": null,
+  "dinner_kcal": 0,
+  "snacks": "salad with 4 small pieces kip vleesworst, coffee with milk powder, 2 Oreo cookies, 2 squares 85% dark chocolate",
+  "snacks_kcal": 450,
+  "total_kcal": 450,
+  "cross_trainer": false,
+  "cross_trainer_minutes": 0,
+  "weight_kg": null,
+  "notes": ""
+}
