@@ -1,0 +1,16 @@
+{
+  "date": "2026-05-14",
+  "breakfast": null,
+  "breakfast_kcal": 0,
+  "lunch": "salad with 150g chicken, small portion of watermelon, focaccia bread with tuna",
+  "lunch_kcal": 720,
+  "dinner": null,
+  "dinner_kcal": 0,
+  "snacks": null,
+  "snacks_kcal": 0,
+  "total_kcal": 720,
+  "cross_trainer": false,
+  "cross_trainer_minutes": 0,
+  "weight_kg": null,
+  "notes": ""
+}
