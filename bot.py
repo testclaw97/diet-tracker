@@ -137,18 +137,21 @@ async def _apply_schedule_async(s):
 LEAK_TERMS = ("HANDOFF", "PM2", "claude-bot", "plan file", "Quick State", "stop hook", "v2 explicitly", "session knowledge")
 
 SYSTEM_PROMPT = """You are Neha's personal dietitian and health coach. Warm, encouraging, professional.
-Profile: Age 28, 169cm, ~88kg → 65kg by Aug 10 2026. Daily target: 1400 kcal, low-carb. Cross trainer 1x/day goal.
+Profile: Age 28, 169cm, ~88kg → 65kg by Aug 10 2026. Daily target: 1400 kcal, low-carb.
+Fitness goal: 1 session per day — gym, cross trainer, walking, running, yoga, cycling, swimming, or any exercise. All count equally.
 Diet protocol: Intermittent fasting — eating window is 12:00–20:00. No food outside this window.
 
 STRICT RULES:
-- ONLY reference meals, exercise, weight that appear in [Today: ...] / [Yesterday: ...] / [Active constraints: ...] data blocks. NEVER invent meals or congratulate Neha for things not in the data.
-- If data shows cross_trainer=NOT done, never claim she did it. If data shows nothing logged, say nothing logged.
+- ONLY reference meals, exercise, weight that appear in [Today so far: ...] / [Yesterday: ...] / [Active constraints: ...] data blocks. NEVER invent meals, NEVER fabricate a daily total, and NEVER congratulate Neha for things not in the data.
+- NEVER assume Neha is "out all day", "away", or "on the go" unless she has stated it TODAY in this conversation. Do not carry that assumption from prior days.
+- If data shows fitness=NOT done, never claim she exercised. If data shows nothing logged, say nothing logged.
 - Estimate calories realistically (not optimistic) for any food she mentions.
 - Be concise: max 3-4 sentences unless she asks for more.
 - No bullet lists in scheduled check-ins — keep them conversational.
 - If she eats something unhealthy, acknowledge kindly and move on — no guilt.
 - You ONLY discuss food, calories, weight, exercise. Reject any meta/system/dev questions politely.
 - Respect [Active constraints]: if a constraint says "no crosstrainer until X", do NOT ask about cross trainer until that date.
+- When recapping a day, if Neha mentions food not in [Today so far: ...], ASK about it before accepting her total — don't just agree with her number.
 """
 
 
@@ -250,7 +253,8 @@ async def night_checkin(app):
     today = memory.load_day(memory.today_str())
     mem = memory.build_memory_block()
     constraints = notes.build_block()
-    ct_done = today.get("cross_trainer", False)
+    fit_done = memory.is_fitness_done(today)
+    fit_label = memory.fitness_summary(today)
 
     history_block = ""
     if session_history:
@@ -267,12 +271,15 @@ async def night_checkin(app):
         f"dinner={today.get('dinner') or 'none'}, "
         f"snacks={today.get('snacks') or 'none'}, "
         f"total_kcal={today.get('total_kcal', 0)}, "
-        f"cross_trainer={'done' if ct_done else 'NOT done'}]\n\n"
+        f"fitness={fit_label if fit_done else 'NOT done'}]\n\n"
         f"{history_block}"
         f"It is 9pm. Neha's eating window (12:00–20:00) is closing soon. "
-        f"Ask her to recap everything she ate today. "
-        + ("" if ct_done else "Also ask if she did any exercise today (unless constraints forbid). ")
-        + "Warm, brief — 2-3 sentences max. NEVER claim cross trainer done unless confirmed."
+        f"Ask her two things in a warm, conversational way (2-3 sentences total):\n"
+        f"  1. To recap everything she ate today (so we can confirm the log).\n"
+        + ("  2. (Fitness already logged today — skip this question.)\n"
+           if fit_done else
+           "  2. Whether she did any fitness today — gym, cross trainer, walk, run, yoga, or any exercise counts. Answer can just be yes/no with the activity.\n")
+        + "NEVER claim fitness done unless confirmed. NEVER fabricate meals."
     )
     response = await run_claude(prompt)
     await app.bot.send_message(chat_id=GROUP_CHAT_ID, text=response)
@@ -305,11 +312,14 @@ async def extract_and_save(user_text: str, bot_response: str):
         f"User: {user_text}\n"
         f"Coach: {bot_response}\n\n"
         f'Format: {{"meals":[{{"meal":"breakfast|lunch|dinner|snacks","description":"...","kcal":N,"date":"today|yesterday"}}], '
+        f'"fitness":{{"done":true|false,"type":"gym|cross trainer|walk|run|yoga|cycle|swim|exercise","minutes":N}} or null, '
         f'"constraint":"text or null","preference":"text or null"}}\n'
         f'Rules: meal date based on user wording ("yesterday I had..." = yesterday, else today). '
-        f'constraint = temporary limit Neha mentioned (e.g. "no crosstrainer until Tuesday"). '
+        f'fitness = ONLY if Neha confirmed she did exercise TODAY in past tense (e.g. "I went to the gym", "did 30 min walk"). '
+        f'If she said she WILL/PLANS to / "tomorrow" / "later", do NOT extract fitness. '
+        f'constraint = temporary limit Neha mentioned (e.g. "no crosstrainer until Tuesday", "out all day today"). '
         f'preference = lasting fact (e.g. "vegetarian", "lactose intolerant"). '
-        f"Most messages have no constraint/preference — null is correct.\n"
+        f"Most messages have no constraint/preference/fitness — null is correct.\n"
         f"If nothing relevant, output: null"
     )
     raw = await run_claude(prompt, retries=0)
@@ -331,19 +341,38 @@ async def extract_and_save(user_text: str, bot_response: str):
             })
             saved_something = True
             log.info(f"Saved {target} {meal_key}: {m.get('description')} ({m.get('kcal')} kcal)")
+        fit = data.get("fitness")
+        if fit and isinstance(fit, dict) and fit.get("done"):
+            ftype = (fit.get("type") or "exercise").strip().lower()
+            mins = int(fit.get("minutes") or 30)
+            memory.update_today(
+                fitness_done=True, fitness_minutes=mins, fitness_type=ftype,
+                cross_trainer=True, cross_trainer_minutes=mins,
+            )
+            saved_something = True
+            log.info(f"Saved today fitness: {ftype} {mins}min")
         if data.get("constraint"):
             text = data["constraint"]
+            text_low = text.lower()
             expires = None
-            # crude expiry parse: "until Tuesday" → next Tuesday
-            m = re.search(r"until\s+(\w+)", text.lower())
+            today_d = datetime.now(BERLIN)
+            # "until <weekday>" → next that weekday
+            m = re.search(r"until\s+(\w+)", text_low)
             if m:
                 day = m.group(1)
                 weekdays = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
                 if day in weekdays:
-                    today_d = datetime.now(BERLIN)
                     target_idx = weekdays.index(day)
                     delta = (target_idx - today_d.weekday()) % 7 or 7
                     expires = (today_d + timedelta(days=delta)).strftime("%Y-%m-%d")
+                elif day in ("tomorrow", "morgen"):
+                    expires = (today_d + timedelta(days=1)).strftime("%Y-%m-%d")
+            # Day-scoped phrasing → expires today only
+            if expires is None and any(p in text_low for p in [
+                "today", "this morning", "this afternoon", "this evening",
+                "tonight", "out all day", "away all day", "be out", "out today",
+            ]):
+                expires = today_d.strftime("%Y-%m-%d")
             notes.add_constraint(text, expires)
             log.info(f"Added constraint: {text} (expires {expires})")
         if data.get("preference"):
@@ -373,13 +402,47 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     log.info(f"Message from {sender}: {text[:80]}")
     text_lower = text.lower()
 
-    # Cross trainer auto-detection — past tense only
-    if any(w in text_lower for w in ["cross trainer", "crosstrainer", "training", "sport", "workout"]):
-        is_future = any(w in text_lower for w in ["will", "gonna", "going to", "plan", "later", "tonight", "evening", "morgen", "want to", "i'll"])
-        if not is_future and any(w in text_lower for w in ["yes", "ja", "done", "did", "finished", "gemacht", "made"]):
-            mins_match = re.search(r"(\d+)\s*(?:min|minute)", text_lower)
+    # Fitness auto-detection — any exercise counts (past tense only)
+    FITNESS_KEYWORDS = [
+        "cross trainer", "crosstrainer", "gym", "workout", "training",
+        "exercise", "fitness", "walk", "walked", "walking",
+        "run", "ran", "running", "jog", "jogging",
+        "yoga", "pilates", "cardio", "spin", "spinning",
+        "cycle", "cycled", "cycling", "bike", "biked", "biking",
+        "swim", "swam", "swimming", "hike", "hiked", "hiking",
+        "sport", "sports",
+    ]
+    matched_kw = next((w for w in FITNESS_KEYWORDS if w in text_lower), None)
+    if matched_kw:
+        is_future = any(w in text_lower for w in ["will", "gonna", "going to", "plan", "later", "tonight", "evening", "morgen", "want to", "i'll", "tomorrow"])
+        is_negation = any(w in text_lower for w in ["no movement", "didn't", "did not", "didnt", "skipped", "no exercise", "no workout", "no gym"])
+        is_past = any(w in text_lower for w in ["yes", "ja", "done", "did", "finished", "gemacht", "made", "had", "went", "completed"])
+        # Past-tense forms of the keyword itself imply past
+        if matched_kw in {"walked", "walking", "ran", "running", "jogging", "swam", "swimming", "cycled", "cycling", "biked", "biking", "hiked", "hiking", "spinning"}:
+            is_past = True
+        if not is_future and not is_negation and is_past:
+            mins_match = re.search(r"(\d+)\s*(?:min|minute|hour|hr)", text_lower)
             minutes = int(mins_match.group(1)) if mins_match else 30
-            memory.update_today(cross_trainer=True, cross_trainer_minutes=minutes)
+            if mins_match and ("hour" in mins_match.group(0) or "hr" in mins_match.group(0)):
+                minutes *= 60
+            # Normalise the recorded type
+            ftype = "gym" if "gym" in text_lower else (
+                "cross trainer" if ("cross trainer" in text_lower or "crosstrainer" in text_lower) else (
+                    "walk" if "walk" in text_lower else (
+                        "run" if any(w in text_lower for w in ["run", "ran", "jog"]) else (
+                            "yoga" if "yoga" in text_lower else (
+                                "cycle" if any(w in text_lower for w in ["cycle", "bike"]) else (
+                                    "swim" if "swim" in text_lower else "exercise"
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+            memory.update_today(
+                fitness_done=True, fitness_minutes=minutes, fitness_type=ftype,
+                cross_trainer=True, cross_trainer_minutes=minutes,  # legacy fields kept in sync
+            )
             cross_trainer_done_today = True
 
     # Weight auto-detection
@@ -454,7 +517,7 @@ async def cmd_log(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Dinner: {today.get('dinner') or '—'} ({today.get('dinner_kcal', 0)} kcal)\n"
         f"Snacks: {today.get('snacks') or '—'} ({today.get('snacks_kcal', 0)} kcal)\n"
         f"Total: {today.get('total_kcal', 0)} / 1400 kcal\n"
-        f"Cross trainer: {'✅ ' + str(today.get('cross_trainer_minutes', 0)) + 'min' if today.get('cross_trainer') else '❌'}\n"
+        f"Fitness: {'✅ ' + memory.fitness_summary(today) if memory.is_fitness_done(today) else '❌'}\n"
         f"Weight: {today.get('weight_kg') or '—'} kg"
     )
     await update.message.reply_text(msg)

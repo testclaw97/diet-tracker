@@ -284,7 +284,7 @@ canvas { max-width: 100%; }
     <div class="icon">🏃‍♀️</div>
     <div class="val" id="card-streak">—</div>
     <div class="lbl">day streak</div>
-    <div class="sub">cross trainer</div>
+    <div class="sub">fitness</div>
   </div>
   <div class="card">
     <div class="icon">⚖️</div>
@@ -347,10 +347,10 @@ canvas { max-width: 100%; }
   </div>
 </div>
 
-<!-- ── 6. CROSS TRAINER ── -->
+<!-- ── 6. FITNESS ── -->
 <div class="section">
   <div class="section-card">
-    <div class="section-title">🏃‍♀️ Cross Trainer — Last 14 Days</div>
+    <div class="section-title">🏃‍♀️ Fitness — Last 14 Days</div>
     <div class="ct-grid" id="ct-grid"></div>
     <div class="ct-stats">
       <div class="ct-stat"><div class="v" id="ct-streak2">—</div><div class="l">Day Streak 🔥</div></div>
@@ -503,7 +503,7 @@ function buildCards(days7, days14, latestWeight) {
   // streak
   let streak = 0;
   for (let i = days14.length - 1; i >= 0; i--) {
-    if (days14[i].data?.cross_trainer) streak++; else break;
+    if (days14[i].data?.fitness_done || days14[i].data?.cross_trainer) streak++; else break;
   }
   document.getElementById("card-streak").textContent = streak || "0";
 
@@ -600,7 +600,7 @@ function buildWeekGrid(days7) {
     if (d) cls += d.total_kcal <= KCAL_GOAL ? " green" : " red";
     if (isToday) cls += " today";
     const kcalTxt = d ? d.total_kcal : "—";
-    const ct = d ? (d.cross_trainer ? "✅" : "❌") : "·";
+    const ct = d ? ((d.fitness_done || d.cross_trainer) ? "✅" : "❌") : "·";
     return `<div class="${cls}">
       <div class="wd-label">${dayLabels[i]}</div>
       <div class="wd-date">${fmtDateShort(ds)}</div>
@@ -657,22 +657,22 @@ function buildKcalChart(days14) {
   });
 }
 
-// ── CROSS TRAINER GRID ──
+// ── FITNESS GRID ──
 function buildCTGrid(days14, streak) {
   const grid = document.getElementById("ct-grid");
   const todayStr = dateStr(0);
   grid.innerHTML = days14.map(({ date, data }) => {
     let cls, ico, lbl;
     if (!data) { cls = "none"; ico = "·"; lbl = fmtDateShort(date); }
-    else if (data.cross_trainer) { cls = "done"; ico = "✅"; lbl = fmtDateShort(date); }
+    else if (data.fitness_done || data.cross_trainer) { cls = "done"; ico = "✅"; lbl = fmtDateShort(date); }
     else { cls = "miss"; ico = "❌"; lbl = fmtDateShort(date); }
     return `<div class="ct-dot ${cls}${date === todayStr ? " today" : ""}">
       <span class="ico">${ico}</span><span class="lbl">${lbl}</span>
     </div>`;
   }).join("");
 
-  const thisWeek = days14.slice(-7).filter(d => d.data?.cross_trainer).length;
-  const total14  = days14.filter(d => d.data?.cross_trainer).length;
+  const thisWeek = days14.slice(-7).filter(d => d.data?.fitness_done || d.data?.cross_trainer).length;
+  const total14  = days14.filter(d => d.data?.fitness_done || d.data?.cross_trainer).length;
   document.getElementById("ct-streak2").textContent = streak;
   document.getElementById("ct-week").textContent = thisWeek + "/7";
   document.getElementById("ct-total").textContent = total14 + "/14";
@@ -755,8 +755,14 @@ function buildHistTable(days7) {
     if (!data) return `<tr><td>${fmtDateShort(date)}</td><td colspan="5" style="color:var(--muted);font-style:italic">no data</td><td>—</td></tr>`;
     const total = data.total_kcal || 0;
     const over  = total > KCAL_GOAL;
-    const ct    = data.cross_trainer
-      ? `<span class="badge green">✅ ${data.cross_trainer_minutes ? data.cross_trainer_minutes+"m" : "yes"}</span>`
+    const fitDone = data.fitness_done || data.cross_trainer;
+    const fitMins = data.fitness_minutes || data.cross_trainer_minutes;
+    const fitType = data.fitness_type;
+    const fitLabel = fitDone
+      ? (fitMins ? `${fitType ? fitType + " " : ""}${fitMins}m` : (fitType || "yes"))
+      : "";
+    const ct    = fitDone
+      ? `<span class="badge green">✅ ${fitLabel}</span>`
       : `<span class="badge red">❌</span>`;
     const totalBadge = over
       ? `<span class="kcal-over">${total}</span>`

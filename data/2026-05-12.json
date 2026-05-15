@@ -9,8 +9,11 @@
   "snacks": "Ben and Jerry's ice cream 80g",
   "snacks_kcal": 150,
   "total_kcal": 1331,
-  "cross_trainer": false,
-  "cross_trainer_minutes": 0,
+  "cross_trainer": true,
+  "cross_trainer_minutes": 45,
+  "fitness_done": true,
+  "fitness_minutes": 45,
+  "fitness_type": "gym",
   "weight_kg": null,
   "notes": ""
 }

@@ -13,10 +13,28 @@ EMPTY_DAY = {
     "dinner": None, "dinner_kcal": 0,
     "snacks": None, "snacks_kcal": 0,
     "total_kcal": 0,
+    "fitness_done": False, "fitness_minutes": 0, "fitness_type": None,
     "cross_trainer": False, "cross_trainer_minutes": 0,
     "weight_kg": None,
     "notes": ""
 }
+
+
+def is_fitness_done(d: dict) -> bool:
+    """True if any exercise logged that day. Falls back to legacy cross_trainer flag."""
+    return bool(d.get("fitness_done") or d.get("cross_trainer"))
+
+
+def fitness_summary(d: dict) -> str:
+    """Short label for the dashboard / prompts."""
+    if d.get("fitness_done"):
+        mins = d.get("fitness_minutes") or 0
+        ftype = d.get("fitness_type") or "exercise"
+        return f"{ftype} {mins}min" if mins else ftype
+    if d.get("cross_trainer"):
+        mins = d.get("cross_trainer_minutes") or 0
+        return f"cross trainer {mins}min" if mins else "cross trainer"
+    return "none"
 
 def today_str():
     return datetime.now(BERLIN).strftime("%Y-%m-%d")
@@ -58,13 +76,13 @@ def build_memory_block() -> str:
 
     # Last 7 days for averages
     kcal_vals = []
-    ct_days = 0
+    fit_days = 0
     for i in range(1, 8):
         d = load_day((datetime.now(BERLIN) - timedelta(days=i)).strftime("%Y-%m-%d"))
         if d.get("total_kcal", 0) > 0:
             kcal_vals.append(d["total_kcal"])
-        if d.get("cross_trainer"):
-            ct_days += 1
+        if is_fitness_done(d):
+            fit_days += 1
 
     week_avg = int(sum(kcal_vals) / len(kcal_vals)) if kcal_vals else 0
 
@@ -74,13 +92,13 @@ def build_memory_block() -> str:
     if y.get("dinner"): yd_parts.append(f"Dinner: {y['dinner']} ({y['dinner_kcal']} kcal)")
     if y.get("snacks"): yd_parts.append(f"Snacks: {y['snacks']} ({y['snacks_kcal']} kcal)")
     yd_parts.append(f"Total: {y['total_kcal']} kcal")
-    ct = f"{y['cross_trainer_minutes']}min ✅" if y.get("cross_trainer") else "❌"
-    yd_parts.append(f"Cross trainer: {ct}")
+    fit = f"{fitness_summary(y)} ✅" if is_fitness_done(y) else "❌"
+    yd_parts.append(f"Fitness: {fit}")
 
     yesterday_line = ". ".join(yd_parts)
     return (
         f"[Yesterday ({yesterday}): {yesterday_line}]\n"
-        f"[Week avg: {week_avg} kcal/day. Cross trainer: {ct_days}/7 days.]\n"
+        f"[Week avg: {week_avg} kcal/day. Fitness: {fit_days}/7 days.]\n"
     )
 
 def get_latest_weight() -> str:
