@@ -1,0 +1,19 @@
+{
+  "date": "2026-05-16",
+  "breakfast": "400g salad with cucumber and cherry tomatoes, 40g mango, 150g chicken, coffee with milk powder",
+  "breakfast_kcal": 350,
+  "lunch": null,
+  "lunch_kcal": 0,
+  "dinner": null,
+  "dinner_kcal": 0,
+  "snacks": null,
+  "snacks_kcal": 0,
+  "total_kcal": 350,
+  "fitness_done": false,
+  "fitness_minutes": 0,
+  "fitness_type": null,
+  "cross_trainer": false,
+  "cross_trainer_minutes": 0,
+  "weight_kg": null,
+  "notes": ""
+}
